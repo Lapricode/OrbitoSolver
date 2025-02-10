@@ -1,12 +1,14 @@
 import numpy as np
 
 
+# convert the game state from its readable form to its processable form
 def convert_game_state(state):
     converted_state = np.copy(state)
     converted_state[state == 1] = 1
     converted_state[state == 2] = -1
     return converted_state
 
+# evaluate and score the game state
 def evaluate_game_state(state):
     state = convert_game_state(state)
     players_check = [False, False]
@@ -25,9 +27,11 @@ def evaluate_game_state(state):
     else:
         return None
 
+# rotate the game tablo along a certain direction
 def rotate_tablo(state, direction):
     return np.copy(state)
 
+# make a given player's turn
 def play_turn(state, player, add_position, remove_position, rotate_direction):
     converted_state = convert_game_state(state)
     if add_position != None:
@@ -37,10 +41,11 @@ def play_turn(state, player, add_position, remove_position, rotate_direction):
     final_state = rotate_tablo(converted_state, rotate_direction)
     return final_state
 
+# print the game state
 def print_game_sate(state):
     state[state == 1] = 1
     state[state == -1] = 2
-    print(state)    
+    print(state)
 
 
 if __name__ == "__main__":
