@@ -1,13 +1,6 @@
 import numpy as np
 
 
-# convert the game state from its readable form to its processable form
-def convert_game_state(state):
-    converted_state = np.copy(state)
-    converted_state[state == 1] = 1
-    converted_state[state == 2] = -1
-    return converted_state
-
 # evaluate and score the game state
 def evaluate_game_state(state):
     state = convert_game_state(state)
@@ -28,8 +21,25 @@ def evaluate_game_state(state):
         return None
 
 # rotate the game tablo along a certain direction
-def rotate_tablo(state, direction):
-    return np.copy(state)
+def rotate_tablo(state, rotate_direction = "clockwise"):
+    n = state.shape[0]
+    rotated_state = state.copy()
+    for layer in range(n // 2):
+        elements = (
+            [(layer, j) for j in range(layer, n - layer)] +  # Top row (left to right)
+            [(i, n - layer - 1) for i in range(layer + 1, n - layer - 1)] +  # Right column (excluding corners)
+            [(n - layer - 1, j) for j in range(n - layer - 1, layer - 1, -1)] +  # Bottom row (right to left)
+            [(i, layer) for i in range(n - layer - 2, layer, -1)]  # Left column (excluding corners)
+        )
+        if rotate_direction.lower() in ["clockwise", "cw", "+", "1"]:
+            for k in range(len(elements)):
+                rotated_state[elements[k]] = state[elements[k - 1]]
+        elif rotate_direction.lower() in ["counterclockwise", "ccw", "-", "-1"]:
+            for k in range(len(elements)):
+                rotated_state[elements[k]] = state[elements[(k + 1) % len(elements)]]
+        else:
+            print("Direction must be \"clockwise\" or \"counterclockwise\".")
+    return rotated_state
 
 # make a given player's turn
 def play_turn(state, player, add_position, remove_position, rotate_direction):
@@ -38,11 +48,18 @@ def play_turn(state, player, add_position, remove_position, rotate_direction):
         converted_state[add_position] = player
     if remove_position != None and state[remove_position] != player:
         converted_state[remove_position] = 0
-    final_state = rotate_tablo(converted_state, rotate_direction)
+    final_state = rotate_tablo(converted_state, str(rotate_direction))
     return final_state
 
+# convert the game state from its readable form to its processable form
+def convert_game_state(state):
+    converted_state = np.copy(state)
+    converted_state[state == 1] = 1
+    converted_state[state == 2] = -1
+    return converted_state
+
 # print the game state
-def print_game_sate(state):
+def print_game_state(state):
     state[state == 1] = 1
     state[state == -1] = 2
     print(state)
@@ -58,7 +75,12 @@ if __name__ == "__main__":
                       [0, 1, 1, 2], \
                       [1, 1, 0, 2]])
     state_evaluation = evaluate_game_state(state)
-    new_state = play_turn(state, 2, (0, 0), (0, 1), 1)
+    new_state = play_turn(state, 2, (0, 0), (0, 1), "+")
+    rotated_state_cw = rotate_tablo(state, "+")
+    rotated_state_ccw = rotate_tablo(state, "-")
     print(state_evaluation)
-    print_game_sate(state)
-    print_game_sate(new_state)
+    print_game_state(state)
+    print_game_state(new_state)
+    print_game_state(rotated_state_cw)
+    print_game_state(rotated_state_ccw)
+    
