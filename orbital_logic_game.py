@@ -38,3 +38,14 @@ if __name__ == "__main__":
     olgf.print_game_state(new_state, players, [2, "  ", ""])
 
     print(3*"\n")
+
+    # Example usage:
+    n = 4
+    k = 1
+    l = 1
+
+    all_strings = olgf.generate_strings(n, k, l)
+    print(f"Total strings: {len(all_strings)}")
+    # Print a few example strings:
+    for s in all_strings[:]:
+        print(s)

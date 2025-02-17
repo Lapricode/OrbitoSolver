@@ -1,11 +1,12 @@
 import numpy as np
 import math as m
+from itertools import combinations
 
 
 # evaluate and score the game state
 def evaluate_game_state(state):
-    # check if the game state is a win for a player
-    # return 1 if player 1 wins, -1 if player 2 wins, and 0 if it is a draw
+    ''' check if the game state is a win for a player
+    return 1 if player 1 wins, -1 if player 2 wins, and 0 if it is a draw '''
     players_check = [False, False]
     for k in range(2):
         board_size = state.shape[0]
@@ -23,6 +24,8 @@ def evaluate_game_state(state):
 
 # rotate the game board along a certain direction
 def rotate_board(state, rotate_direction = "clockwise"):
+    ''' rotate the game board along a certain direction
+    rotate_direction can be clockwise or "counterclockwise '''
     n = state.shape[0]
     rotated_state = state.copy()
     for layer in range(n // 2):
@@ -43,6 +46,12 @@ def rotate_board(state, rotate_direction = "clockwise"):
 
 # make a player's turn
 def play_turn(state, next_move):
+    ''' make a player's turn
+    next_move is a dictionary with the following keys:
+    "player" for the player making the move (1 for player 1, -1 for player 2),
+    "transfer" for the transfer move of an opponent's piece to an adjacent cell (optional),
+    "addition" for the addition move of a player's piece to an empty cell (optional),
+    "rotation" for the direction of the board rotation '''
     state_copy = state.copy()
     n = state.shape[0]
     player = next_move["player"]  # 1 for player 1, -1 for player 2
@@ -83,6 +92,9 @@ def play_turn(state, next_move):
 
 # return a list of all possible moves for a player, from the current game state
 def get_possible_moves(state, player = 1, rotate_direction = "clockwise"):
+    ''' return a list of all possible moves for a player, from the current game state
+    player is 1 for player 1 and -1 for player 2
+    rotate_direction is clockwise or counterclockwise '''
     n = state.shape[0]
     opponent = -player
     possible_moves = []
@@ -115,8 +127,29 @@ def get_possible_moves(state, player = 1, rotate_direction = "clockwise"):
                 possible_moves.append({"player": player, "transfer": None, "addition": (row, column), "rotation": rotate_direction})
     return possible_moves
 
+# generate all possible strings of a certain length n with k and l occurrences of two symbols
+def generate_strings(n, k, l):
+    ''' n is the length of the string, k is the number of the first symbol, and l is the number of the second symbol in the string '''
+    symbols = ["1", "2", "0"]
+    if k + l > n: print("The sum of k and l must not exceed n."); return None
+    positions = list(range(n))  # positions in the string
+    all_strings = []  # list to store the generated strings
+    for x_positions in combinations(positions, k):  # choose k positions for one symbol in the string
+        remaining_positions = set(positions) - set(x_positions)  # remaining positions for the other symbols in the string
+        for o_positions in combinations(sorted(remaining_positions), l):  # choose l positions for the other symbol in the string
+            s = [str(symbols[2])] * n  # initialize the string with default symbols
+            for pos in x_positions:  # place the first symbol in the chosen related positions
+                s[pos] = str(symbols[0])
+            for pos in o_positions:  # place the second symbol in the chosen related positions
+                s[pos] = str(symbols[1])
+            all_strings.append(''.join(s))  # add the string to the list
+    return all_strings
+
 # convert the game state from its readable form to its processable form
 def convert_game_state(state, old_symbols = [1, 2, 0], new_symbols = [1, -1, 0]):
+    ''' convert the game state from its readable form to its processable form
+    old_symbols is a list of the symbols in the readable form
+    new_symbols is a list of the symbols in the processable form '''
     converted_state = np.copy(state)
     for k in range(len(old_symbols)):
         converted_state[state == old_symbols[k]] = new_symbols[k]
@@ -124,6 +157,10 @@ def convert_game_state(state, old_symbols = [1, 2, 0], new_symbols = [1, -1, 0])
 
 # print the game state
 def print_game_state(state, players = ["x", "o"], print_gap_info = [1, "  ", ""]):
+    ''' print the game state
+    players is a list of the symbols for the players
+    print_gap_info is a list with the following elements:
+    the number of repeated columns, the gap between columns, and the gap between rows '''
     n = state.shape[0]
     state = state.tolist()
     columns_gap = print_gap_info[0] * print_gap_info[1]
@@ -145,11 +182,13 @@ def print_game_state(state, players = ["x", "o"], print_gap_info = [1, "  ", ""]
             print(rows_gap_total)
 
 # print some game statistics
-
 def multinomial(n, k, r):  # n! / (k! * r! * (n - k - r)!)
+    ''' calculate the multinomial coefficient
+    n is the total number of elements, k is the number of the first type of elements, and r is the number of the second type of elements '''
     return m.comb(n, k) * m.comb(n - k, r)
 
 def print_game_statistics(board_size):
+    ''' print some game statistics '''
     board_cells = board_size ** 2
     possible_board_states = 0
     # calculate the number of possible board states starting with the same player (else it is double that number)
