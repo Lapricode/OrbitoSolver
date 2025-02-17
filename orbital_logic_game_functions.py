@@ -34,10 +34,10 @@ def rotate_board(state, rotate_direction = "clockwise"):
                     [(i, n - layer - 1) for i in range(layer + 1, n - layer - 1)] + \
                     [(n - layer - 1, j) for j in range(n - layer - 1, layer - 1, -1)] + \
                     [(i, layer) for i in range(n - layer - 2, layer, -1)])
-        if rotate_direction.lower() in ["clockwise", "cw", "+", "1"]:
+        if rotate_direction.lower() in ["clockwise", "cw", "-", "-1"]:
             for k in range(len(elements)):
                 rotated_state[elements[k]] = state[elements[k - 1]]
-        elif rotate_direction.lower() in ["counterclockwise", "ccw", "-", "-1"]:
+        elif rotate_direction.lower() in ["counterclockwise", "ccw", "+", "1"]:
             for k in range(len(elements)):
                 rotated_state[elements[k]] = state[elements[(k + 1) % len(elements)]]
         else:
@@ -50,14 +50,14 @@ def play_turn(state, next_move):
     next_move is a dictionary with the following keys:
     "player" for the player making the move (1 for player 1, -1 for player 2),
     "transfer" for the transfer move of an opponent's piece to an adjacent cell (optional),
-    "addition" for the addition move of a player's piece to an empty cell (optional),
-    "rotation" for the direction of the board rotation '''
+    "add" for the add move of a player's piece to an empty cell (optional),
+    "rotate" for the direction of the board rotation '''
     state_copy = state.copy()
     n = state.shape[0]
     player = next_move["player"]  # 1 for player 1, -1 for player 2
     transfer = next_move["transfer"]  # [position, direction] of the piece to be transferred
-    addition = next_move["addition"]  # position of the piece to be added
-    rotation = next_move["rotation"]  # direction of the board rotation
+    add = next_move["add"]  # position of the piece to be added
+    rotate = next_move["rotate"]  # direction of the board rotation
     opponent = -player
     # transfer move of an opponent's piece to an adjacent cell
     # 4 possible directions: "u" for up, "d" for down, "l" for left, "r" for right
@@ -80,14 +80,14 @@ def play_turn(state, next_move):
         # perform the transfer moving the opponent's piece
         state_copy[target] = state_copy[from_pos]
         state_copy[from_pos] = 0
-    # addition move of a player's piece to an empty cell
-    if addition is not None:
-        if state_copy[addition] == 0:
+    # add move of a player's piece to an empty cell
+    if add is not None:
+        if state_copy[add] == 0:
             # place the player's piece in the target cell
-            state_copy[addition] = player
-        else: print("Addition move invalid: target cell is not empty!"); return state  # check if the target cell is empty, to place the piece
-    else: print("No addition move!"); return state  # check if there is an addition move, else the turn is invalid
-    final_state = rotate_board(state_copy, str(rotation))  # rotate the board
+            state_copy[add] = player
+        else: print("Add move invalid: target cell is not empty!"); return state  # check if the target cell is empty, to place the piece
+    else: print("No add move!"); return state  # check if there is an add move, else the turn is invalid
+    final_state = rotate_board(state_copy, str(rotate))  # rotate the board
     return final_state
 
 # return a list of all possible moves for a player, from the current game state
@@ -98,7 +98,7 @@ def get_possible_moves(state, player = 1, rotate_direction = "clockwise"):
     n = state.shape[0]
     opponent = -player
     possible_moves = []
-    # create possible moves with both transfer and addition
+    # create possible moves with both transfer and add
     for row in range(n):
         for column in range(n):
             if state[row, column] == opponent:
@@ -114,17 +114,17 @@ def get_possible_moves(state, player = 1, rotate_direction = "clockwise"):
                         target = column + (-1) ** (transfer_direction == "l")
                         if 0 <= target < n and state[row, target] == 0:
                             target_cell = (row, target) 
-                    # addition part
+                    # add part
                     if target_cell is not None:
                         for i in range(n):
                             for j in range(n):
                                 if (state[i, j] == 0 and (i, j) != target_cell) or (i, j) == source_cell:
-                                    possible_moves.append({"player": player, "transfer": [(row, column), transfer_direction], "addition": (i, j), "rotation": rotate_direction})
-    # create possible moves with addition only
+                                    possible_moves.append({"player": player, "transfer": [(row, column), transfer_direction], "add": (i, j), "rotate": rotate_direction})
+    # create possible moves with add only
     for row in range(n):
         for column in range(n):
             if state[row, column] == 0:
-                possible_moves.append({"player": player, "transfer": None, "addition": (row, column), "rotation": rotate_direction})
+                possible_moves.append({"player": player, "transfer": None, "add": (row, column), "rotate": rotate_direction})
     return possible_moves
 
 # generate all possible strings of a certain length n with k and l occurrences of two symbols
@@ -194,7 +194,7 @@ def print_game_statistics(board_size):
     # calculate the number of possible board states starting with the same player (else it is double that number)
     # not accounting for rotational symmetries
     for k in range(1, board_cells + 1):
-        print(multinomial(board_cells, int(np.floor(k / 2)), int(np.ceil(k / 2))))
+        # print(multinomial(board_cells, int(np.floor(k / 2)), int(np.ceil(k / 2))))
         possible_board_states += multinomial(board_cells, int(np.floor(k / 2)), int(np.ceil(k / 2)))
     # accounting for rotational symmetries
     
