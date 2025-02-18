@@ -128,7 +128,7 @@ def get_possible_moves(state, player = 1, rotate_direction = "clockwise"):
     return possible_moves
 
 # generate all possible strings of a certain length n with k and l occurrences of two symbols
-def generate_strings(n, k, l):
+def generate_states_strings(n, k, l):
     ''' n is the length of the string, k is the number of the first symbol, and l is the number of the second symbol in the string '''
     symbols = ["1", "2", "0"]
     if k + l > n: print("The sum of k and l must not exceed n."); return None
@@ -144,6 +144,20 @@ def generate_strings(n, k, l):
                 s[pos] = str(symbols[1])
             all_strings.append(''.join(s))  # add the string to the list
     return all_strings
+
+# convert strings of the game states to their processable form
+def convert_strings_to_states(states_strings, old_symbols = ["1", "2", "0"], new_symbols = [1, -1, 0]):
+    ''' convert strings of the game states to their processable form
+    old_symbols is a list of the symbols in the strings
+    new_symbols is a list of the symbols in the processable form '''
+    converted_states = []
+    n = np.sqrt(len(states_strings[0])).astype(int)
+    for state_string in states_strings:
+        converted_state = np.zeros((n, n))
+        for k in range(len(old_symbols)):
+            converted_state[state_string == old_symbols[k]] = new_symbols[k]
+        converted_states.append(converted_state)
+    return converted_states
 
 # convert the game state from its readable form to its processable form
 def convert_game_state(state, old_symbols = [1, 2, 0], new_symbols = [1, -1, 0]):
