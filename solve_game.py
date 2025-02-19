@@ -120,7 +120,7 @@ def estimated_game_result(score, current_player):
     else:
         return "\nEstimated draw"
 
-def solve_game(state, player, maximizing_player=None, depth=0, alpha=-math.inf, beta=math.inf):
+def solve_game(state, player, maximizing_player = None, depth = 0, alpha = -math.inf, beta = math.inf):
     """
     Recursively solves the game from the given state, returning a dictionary with:
       - "score": the minimax evaluation score,
@@ -194,15 +194,20 @@ def solve_game(state, player, maximizing_player=None, depth=0, alpha=-math.inf, 
 
 if __name__ == "__main__":
     print("Welcome to the game solver!")
-    initial_state = np.array([[0, 1, 0], \
-                                [0, 0, -1], \
-                                [0, 0, 0]])
+    # initial_state = np.array([[0, 1, 0], \
+    #                             [0, 0, -1], \
+    #                             [0, 0, 0]])
+    initial_state = np.array([[0, 0, 0, 1], \
+                                [0, 0, -1, 0], \
+                                [0, 1, 0, 0], \
+                                [-1, 0, 0, 0]])
     board_size = initial_state.shape[0]
     print_game_statistics(board_size)
     current_player = 1
     
     print("\n\nInitial game state:\n")
     print_game_state(initial_state)
+    print(f"\n\nCurrent player: {current_player}")
 
     # Find the best move and its evaluation score.
     start_time = time.time()
