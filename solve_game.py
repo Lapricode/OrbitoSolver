@@ -1,6 +1,7 @@
 import math
 import numpy as np
-from orbital_logic_game_functions import evaluate_game_state, get_possible_moves, play_turn, print_game_statistics
+import time
+from orbital_logic_game_functions import evaluate_game_state, get_possible_moves, play_turn, print_game_state, print_game_statistics
 
 
 def minimax(state, player, maximizing_player, depth, alpha, beta):
@@ -29,7 +30,7 @@ def minimax(state, player, maximizing_player, depth, alpha, beta):
             return -1000 + depth  # slower loss is slightly better
 
     # Get all possible moves for the current player.
-    moves = get_possible_moves(state, player, rotate_direction="clockwise")
+    moves = get_possible_moves(state, player, rotate_direction = "clockwise")
     if not moves:
         return 0  # No moves available means a draw (should not normally happen)
 
@@ -67,7 +68,7 @@ def find_best_move(state, player):
 
     best_move = None
     best_value = -math.inf
-    moves = get_possible_moves(state, player, rotate_direction="clockwise")
+    moves = get_possible_moves(state, player, rotate_direction = "clockwise")
 
     for move in moves:
         new_state = play_turn(state, move)
@@ -77,14 +78,171 @@ def find_best_move(state, player):
             best_move = move
     return best_move, best_value
 
+def simulate_principal_variation(state, player, max_steps = 50):
+    """
+    Simulate a possible evolution of the game (the principal variation) by alternately choosing best moves.
+    Parameters:
+        state: the starting game state (a numpy array)
+        player: the player whose turn it is (1 or -1)
+        max_steps: maximum number of moves to simulate to avoid infinite loops
+    Returns:
+        A list of game states representing the evolution from the current state.
+    """
+    evolution = [{"move": None, "state": state}]
+    current_state = state
+    current_player = player
+    steps = 0
+    while steps < max_steps:
+        if evaluate_game_state(current_state) is not None:
+            break
+        best_move, score = find_best_move(current_state, current_player)
+        if best_move is None:
+            break
+        current_state = play_turn(current_state, best_move)
+        evolution.append({"move": best_move, "state": current_state})
+        current_player = -current_player
+        steps += 1
+    return evolution
+
+def estimated_game_result(score, current_player):
+    """
+    Returns a human-readable message on the estimated outcome of the game based on the minimax score.
+    Parameters:
+        score: the minimax evaluation score
+        current_player: the player for whom the best move was computed (assumed to be the maximizing player)
+    Returns:
+        A string message indicating the estimated result.
+    """
+    if score > 0:
+        return f"\nEstimated win for player {current_player}"
+    elif score < 0:
+        return f"\nEstimated win for player {-current_player}"
+    else:
+        return "\nEstimated draw"
+
+def solve_game(state, player, maximizing_player=None, depth=0, alpha=-math.inf, beta=math.inf):
+    """
+    Recursively solves the game from the given state, returning a dictionary with:
+      - "score": the minimax evaluation score,
+      - "state_sequence": a list of game states representing the evolution from the current state to a terminal state,
+      - "moves_sequence": a list of moves (dictionaries) that lead from one state to the next.
+    
+    Parameters:
+      state: the current game state (a numpy array)
+      player: the player whose turn it is (1 or -1)
+      maximizing_player: the player for whom we are optimizing (defaults to the initial player)
+      depth: current recursion depth (used to favor faster wins/longer losses)
+      alpha: best value found so far for the maximizer
+      beta: best value found so far for the minimizer
+      
+    Returns:
+      A dictionary with keys "score", "state_sequence", and "moves_sequence".
+    """
+    if maximizing_player is None:
+        maximizing_player = player
+
+    # Check if the current state is terminal.
+    result = evaluate_game_state(state)
+    if result is not None:
+        if result == 0:
+            return {"score": 0, "state_sequence": [state], "moves_sequence": []}
+        elif result == maximizing_player:
+            return {"score": 1000 - depth, "state_sequence": [state], "moves_sequence": []}
+        else:
+            return {"score": -1000 + depth, "state_sequence": [state], "moves_sequence": []}
+
+    moves = get_possible_moves(state, player, rotate_direction="clockwise")
+    if not moves:
+        return {"score": 0, "state_sequence": [state], "moves_sequence": []}
+
+    # For the maximizing player, choose the move with the highest score.
+    if player == maximizing_player:
+        best_eval = -math.inf
+        best_state_seq = None
+        best_moves_seq = None
+        for move in moves:
+            new_state = play_turn(state, move)
+            child = solve_game(new_state, -player, maximizing_player, depth + 1, alpha, beta)
+            child_eval = child["score"]
+            if child_eval > best_eval:
+                best_eval = child_eval
+                best_state_seq = [state] + child["state_sequence"]
+                best_moves_seq = [move] + child["moves_sequence"]
+            alpha = max(alpha, child_eval)
+            if beta <= alpha:
+                break  # beta cutoff
+        return {"score": best_eval, "state_sequence": best_state_seq, "moves_sequence": best_moves_seq}
+
+    # For the minimizing player, choose the move with the lowest score.
+    else:
+        best_eval = math.inf
+        best_state_seq = None
+        best_moves_seq = None
+        for move in moves:
+            new_state = play_turn(state, move)
+            child = solve_game(new_state, -player, maximizing_player, depth + 1, alpha, beta)
+            child_eval = child["score"]
+            if child_eval < best_eval:
+                best_eval = child_eval
+                best_state_seq = [state] + child["state_sequence"]
+                best_moves_seq = [move] + child["moves_sequence"]
+            beta = min(beta, child_eval)
+            if beta <= alpha:
+                break  # alpha cutoff
+        return {"score": best_eval, "state_sequence": best_state_seq, "moves_sequence": best_moves_seq}
+
 
 if __name__ == "__main__":
     print("Welcome to the game solver!")
-    # Set up an empty board for a 3x3 game (change board_size as desired)
-    board_size = 3
-    state = np.zeros((board_size, board_size))
-    current_player = 1  # Let's say player 1 is to move
-    best_move, score = find_best_move(state, current_player)
-    print("Best move found:")
+    initial_state = np.array([[0, 1, 0], \
+                                [0, 0, -1], \
+                                [0, 0, 0]])
+    board_size = initial_state.shape[0]
+    print_game_statistics(board_size)
+    current_player = 1
+    
+    print("\n\nInitial game state:\n")
+    print_game_state(initial_state)
+
+    # Find the best move and its evaluation score.
+    start_time = time.time()
+    best_move, score = find_best_move(initial_state, current_player)
+    print("\n\n\nBest move found:")
     print(best_move)
-    print("Minimax evaluation score:", score)
+    print(f"\nMinimax evaluation score: {score}")
+    print(f"\nTime taken: {time.time() - start_time} sec")
+
+    # # Apply the best move to get the new state.
+    # new_state = play_turn(initial_state, best_move)
+    # print("\n\nGame state after best move:\n")
+    # print_game_state(new_state)
+
+    # # Print the estimated result of the game.
+    # result_message = estimated_game_result(score, current_player)
+    # print("\n" + result_message)
+
+    # # Simulate and print a possible evolution of the game.
+    # print("\nPossible evolution of the game (principal variation):")
+    # evolution = simulate_principal_variation(initial_state, current_player)
+    # for move_number, evolution_moment in enumerate(evolution):
+    #     print(f"\n\n\nMove {move_number}: \t {evolution_moment['move']}\n")
+    #     print_game_state(evolution_moment["state"])
+
+    # Solve the game from the current state.
+    solution = solve_game(initial_state, current_player)
+    score = solution["score"]
+    perfect_state_seq = solution["state_sequence"]
+    perfect_moves_seq = solution["moves_sequence"]
+    
+    # Print the final evaluation.
+    result_message = estimated_game_result(score, current_player)
+    print("\n" + result_message)
+    
+    # Print the perfect game evolution.
+    print("\nPerfect game evolution (states with perfect play):\n")
+    for move_number, s in enumerate(perfect_state_seq):
+        print(f"State after move {move_number}:")
+        print_game_state(s)
+        if move_number < len(perfect_moves_seq):
+            print(f"\n\nMove {move_number}: {perfect_moves_seq[move_number]}")
+    print("\n")
