@@ -214,6 +214,6 @@ def print_game_statistics(board_size):
     
     print("\n--- Game statistics ---")
     align_gap = 1
-    print("board size (# of side cells):" + align_gap * "\t" + f"{board_size}")
-    print("# of total board cells:      " + align_gap * "\t" + f"{board_cells}")
-    print("# of possible board states:  " + align_gap * "\t" + f"{possible_board_states}")
+    print("board size (# of side cells):   " + "\t" + f"{board_size}")
+    print("# of total board cells:         " + "\t" + f"{board_cells}")
+    print("# of possible board states:     " + "\t" + f"{possible_board_states}")

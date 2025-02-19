@@ -27,7 +27,8 @@ if __name__ == "__main__":
     players = ["x", "o"]
     verbose_print = False
     games_played = 10000
-    board_size = 4
+    board_size = 3
+    olgf.print_game_statistics(board_size)
     counters = {"1_start_1_win": 0, "1_start_2_win": 0, "2_start_1_win": 0, "2_start_2_win": 0, "1_start_draw": 0, "2_start_draw": 0}
     start_player = 1
     for i in range(games_played):
