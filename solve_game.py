@@ -104,27 +104,31 @@ def simulate_principal_variation(state, rotate_direction = "clockwise", player =
         steps += 1
     return evolution
 
-def estimated_game_result(score, current_player = 1):
+def estimated_game_result(score, players = ["x", "o"], start_player = 1, maximizing_player = None):
     """
-    Returns a human-readable message on the estimated outcome of the game based on the minimax score.
+    Returns a message describing the estimated result of the game based on the minimax score.
     Parameters:
         score: the minimax evaluation score
-        current_player: the player for whom the best move was computed (assumed to be the maximizing player)
+        players: a list of player symbols (e.g., ["x", "o"])
+        start_player: the player who started the game (1 or -1)
+        maximizing_player: the player for whom we are optimizing (1 or -1)
     Returns:
-        A string message indicating the estimated result.
+        A message describing the estimated result of the game.
     """
+    if maximizing_player is None:
+        maximizing_player = start_player
     if score > 0:
-        return f"\nEstimated win for player {current_player}"
+        return f"Player {players[[maximizing_player == 1, maximizing_player == -1][start_player == maximizing_player]]} wins!"
     elif score < 0:
-        return f"\nEstimated win for player {-current_player}"
-    else:
-        return "\nEstimated draw"
+        return f"Player {players[[maximizing_player == -1, maximizing_player == 1][start_player == maximizing_player]]} wins!"
+    elif score == 0:
+        return "It's a draw!"
 
 def solve_game(state, rotate_direction = "clockwise", transfer_allowed = True, player = 1, maximizing_player = None, depth = 0, alpha = -math.inf, beta = math.inf):
     """
     Recursively solves the game from the given state, returning a dictionary with:
         - "score": the minimax evaluation score,
-        - "state_sequence": a list of game states representing the evolution from the current state to a terminal state,
+        - "states_sequence": a list of game states representing the evolution from the current state to a terminal state,
         - "moves_sequence": a list of moves (dictionaries) that lead from one state to the next.
     
     Parameters:
@@ -138,7 +142,7 @@ def solve_game(state, rotate_direction = "clockwise", transfer_allowed = True, p
         beta: best value found so far for the minimizer
       
     Returns:
-        A dictionary with keys "score", "state_sequence", and "moves_sequence".
+        A dictionary with keys "score", "states_sequence", and "moves_sequence".
     """
     if maximizing_player is None:
         maximizing_player = player
@@ -147,15 +151,15 @@ def solve_game(state, rotate_direction = "clockwise", transfer_allowed = True, p
     result = evaluate_game_state(state)
     if result is not None:
         if result == 0:
-            return {"score": 0, "state_sequence": [state], "moves_sequence": []}
+            return {"score": 0, "states_sequence": [state], "moves_sequence": []}
         elif result == maximizing_player:
-            return {"score": 1000 - depth, "state_sequence": [state], "moves_sequence": []}
+            return {"score": 1000 - depth, "states_sequence": [state], "moves_sequence": []}
         else:
-            return {"score": -1000 + depth, "state_sequence": [state], "moves_sequence": []}
+            return {"score": -1000 + depth, "states_sequence": [state], "moves_sequence": []}
 
     moves = get_possible_moves(state, rotate_direction, transfer_allowed, player)
     if not moves:
-        return {"score": 0, "state_sequence": [state], "moves_sequence": []}
+        return {"score": 0, "states_sequence": [state], "moves_sequence": []}
 
     # For the maximizing player, choose the move with the highest score.
     if player == maximizing_player:
@@ -168,12 +172,12 @@ def solve_game(state, rotate_direction = "clockwise", transfer_allowed = True, p
             child_eval = child["score"]
             if child_eval > best_eval:
                 best_eval = child_eval
-                best_state_seq = [state] + child["state_sequence"]
+                best_state_seq = [state] + child["states_sequence"]
                 best_moves_seq = [move] + child["moves_sequence"]
             alpha = max(alpha, child_eval)
             if beta <= alpha:
                 break  # beta cutoff
-        return {"score": best_eval, "state_sequence": best_state_seq, "moves_sequence": best_moves_seq}
+        return {"score": best_eval, "states_sequence": best_state_seq, "moves_sequence": best_moves_seq}
 
     # For the minimizing player, choose the move with the lowest score.
     else:
@@ -186,12 +190,12 @@ def solve_game(state, rotate_direction = "clockwise", transfer_allowed = True, p
             child_eval = child["score"]
             if child_eval < best_eval:
                 best_eval = child_eval
-                best_state_seq = [state] + child["state_sequence"]
+                best_state_seq = [state] + child["states_sequence"]
                 best_moves_seq = [move] + child["moves_sequence"]
             beta = min(beta, child_eval)
             if beta <= alpha:
                 break  # alpha cutoff
-        return {"score": best_eval, "state_sequence": best_state_seq, "moves_sequence": best_moves_seq}
+        return {"score": best_eval, "states_sequence": best_state_seq, "moves_sequence": best_moves_seq}
 
 
 if __name__ == "__main__":
@@ -200,16 +204,16 @@ if __name__ == "__main__":
                                 [0, 0, 0], \
                                 [0, 0, 0]])
     # initial_state = np.array([[1, -1, 0, 1], \
-    #                             [1, -1, -1, 0], \
-    #                             [0, -1, 1, 1], \
+    #                             [0, 0, -1, 0], \
+    #                             [0, 0, 0, 1], \
     #                             [-1, 0, 0, 0]])
-    initial_state = np.zeros((4, 4))
+    initial_state = np.zeros((3, 3))
     board_size = initial_state.shape[0]
     print_game_statistics(board_size)
     players = ["x", "o"]
-    start_player = 1
+    start_player = -1
     rotate_direction = "0"
-    transfer_allowed = False
+    transfer_allowed = True
     
     print("\n\nInitial game state:\n")
     print_game_state(initial_state)
@@ -220,21 +224,22 @@ if __name__ == "__main__":
     solution = solve_game(initial_state, rotate_direction, transfer_allowed, start_player)
     print(f"\n\nTime taken: {time.time() - start_time} sec")
     score = solution["score"]
-    perfect_state_seq = solution["state_sequence"]
+    perfect_states_seq = solution["states_sequence"]
     perfect_moves_seq = solution["moves_sequence"]
     
     # Print the final evaluation.
-    result_message = estimated_game_result(score, start_player)
+    result_message = estimated_game_result(score, players, start_player)
     print("\n" + result_message)
     
     # Print the perfect game evolution.
     print("\nPerfect game evolution (states with perfect play):\n")
-    for move_number, s in enumerate(perfect_state_seq):
+    player = start_player
+    for move_number, s in enumerate(perfect_states_seq):
         print(f"State after move {move_number}:")
-        print_game_state(s)
+        print_game_state(s, players)
         if move_number < len(perfect_moves_seq):
-            player = start_player if move_number % 2 == 0 else -start_player
-            print(f"\n\nMove {move_number + 1} ({player} plays) : {perfect_moves_seq[move_number]}")
+            print(f"\n\nMove {move_number + 1} ({players[[1, 0][player == 1]]}) : {perfect_moves_seq[move_number]}")
+            player *= -1
     print("\n")
 
     # # Find the best move and its evaluation score.
@@ -251,7 +256,7 @@ if __name__ == "__main__":
     # print_game_state(new_state)
 
     # # Print the estimated result of the game.
-    # result_message = estimated_game_result(score, start_player)
+    # result_message = estimated_game_result(score, players, start_player)
     # print("\n" + result_message)
 
     # # Simulate and print a possible evolution of the game.

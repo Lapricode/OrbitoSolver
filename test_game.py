@@ -109,7 +109,6 @@ if __name__ == "__main__":
 # o  _  _  o  
 
 # Current player: 1
-        
 
 
 # Best move found:
@@ -182,3 +181,74 @@ if __name__ == "__main__":
 # _  x  o  x  
       
 # o  x  x  o
+
+
+
+# Initial game state:
+
+# x  o  _  x  
+      
+# x  o  o  _  
+      
+# _  o  x  x  
+      
+# o  _  _  _  
+
+# Current player: 1
+
+
+# Time taken: 5.8157689571380615 sec
+
+
+# Estimated draw
+
+# Perfect game evolution (states with perfect play):
+
+# State after move 0:
+# x  o  _  x  
+      
+# x  o  o  _  
+      
+# _  o  x  x  
+      
+# o  _  _  _  
+
+# Move 1: {'player': 1, 'transfer': [(1, 2), 'r'], 'add': (2, 0), 'rotate': '-1'}
+# State after move 1:
+# x  x  o  _  
+      
+# x  o  o  x  
+      
+# o  x  _  o  
+      
+# _  _  _  x  
+
+# Move 2: {'player': -1, 'transfer': None, 'add': (3, 0), 'rotate': '-1'}
+# State after move 2:
+# x  x  x  o  
+      
+# o  x  o  _  
+      
+# o  _  o  x  
+      
+# _  _  x  o  
+
+# Move 3: {'player': 1, 'transfer': [(1, 2), 'r'], 'add': (1, 2), 'rotate': '-1'}
+# State after move 3:
+# o  x  x  x  
+      
+# o  _  x  o  
+      
+# _  o  x  o  
+      
+# _  x  o  x  
+
+# Move 4: {'player': -1, 'transfer': [(1, 2), 'l'], 'add': (1, 2), 'rotate': '-1'}
+# State after move 4:
+# o  o  x  x  
+      
+# _  o  x  x  
+      
+# _  x  o  o  
+      
+# x  o  x  o
