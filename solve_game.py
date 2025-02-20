@@ -200,19 +200,19 @@ def solve_game(state, rotate_direction = "clockwise", transfer_allowed = True, p
 
 if __name__ == "__main__":
     print("Welcome to the game solver!")
-    initial_state = np.array([[0, 0, 0], \
-                                [0, 0, 0], \
+    initial_state = np.array([[0, 0, -1], \
+                                [0, 1, 1], \
                                 [0, 0, 0]])
     # initial_state = np.array([[1, -1, 0, 1], \
     #                             [0, 0, -1, 0], \
     #                             [0, 0, 0, 1], \
     #                             [-1, 0, 0, 0]])
-    initial_state = np.zeros((3, 3))
+    # initial_state = np.zeros((3, 3))
     board_size = initial_state.shape[0]
     print_game_statistics(board_size)
     players = ["x", "o"]
     start_player = -1
-    rotate_direction = "0"
+    rotate_direction = "-"
     transfer_allowed = True
     
     print("\n\nInitial game state:\n")
@@ -222,7 +222,7 @@ if __name__ == "__main__":
     # Solve the game from the current state.
     start_time = time.time()
     solution = solve_game(initial_state, rotate_direction, transfer_allowed, start_player)
-    print(f"\n\nTime taken: {time.time() - start_time} sec")
+    print(f"\n\nTime taken: {time.time() - start_time:.3f} sec")
     score = solution["score"]
     perfect_states_seq = solution["states_sequence"]
     perfect_moves_seq = solution["moves_sequence"]
@@ -248,7 +248,7 @@ if __name__ == "__main__":
     # print("\n\n\nBest move found:")
     # print(best_move)
     # print(f"\nMinimax evaluation score: {score}")
-    # print(f"\n\nTime taken: {time.time() - start_time} sec")
+    # print(f"\n\nTime taken: {time.time() - start_time:.3f} sec")
 
     # # Apply the best move to get the new state.
     # new_state = play_turn(initial_state, best_move)
