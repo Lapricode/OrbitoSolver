@@ -207,22 +207,30 @@ if __name__ == "__main__":
     #                             [0, 0, -1, 0], \
     #                             [0, 0, 0, 1], \
     #                             [-1, 0, 0, 0]])
-    # initial_state = np.zeros((3, 3))
+    # initial_state = np.zeros((4, 4))
     board_size = initial_state.shape[0]
     print_game_statistics(board_size)
     players = ["x", "o"]
+    players_symbols = {1: "x", -1: "o"}
     start_player = -1
-    rotate_direction = "-"
+    rotate_direction = "+"
     transfer_allowed = True
     
     print("\n\nInitial game state:\n")
     print_game_state(initial_state)
-    print(f"\n\nCurrent player: {start_player}")
+    print(f"\n\nStart player: {players_symbols[start_player]}")
+
+    # # Find the best move and its evaluation score.
+    # start_time = time.time()
+    # best_move, score = find_best_move(initial_state, rotate_direction, transfer_allowed, start_player)
+    # print(f"\n\nBest move found. Time taken: {time.time() - start_time:.3f} sec")
+    # print(best_move)
+    # print(f"{estimated_game_result(score, players, start_player)} Minimax evaluation score: {score}")
 
     # Solve the game from the current state.
     start_time = time.time()
     solution = solve_game(initial_state, rotate_direction, transfer_allowed, start_player)
-    print(f"\n\nTime taken: {time.time() - start_time:.3f} sec")
+    print(f"\n\nTime taken to solve the game: {time.time() - start_time:.3f} sec")
     score = solution["score"]
     perfect_states_seq = solution["states_sequence"]
     perfect_moves_seq = solution["moves_sequence"]
@@ -241,23 +249,6 @@ if __name__ == "__main__":
             print(f"\n\nMove {move_number + 1} ({players[[1, 0][player == 1]]}) : {perfect_moves_seq[move_number]}")
             player *= -1
     print("\n")
-
-    # # Find the best move and its evaluation score.
-    # start_time = time.time()
-    # best_move, score = find_best_move(initial_state, rotate_direction, transfer_allowed, start_player)
-    # print("\n\n\nBest move found:")
-    # print(best_move)
-    # print(f"\nMinimax evaluation score: {score}")
-    # print(f"\n\nTime taken: {time.time() - start_time:.3f} sec")
-
-    # # Apply the best move to get the new state.
-    # new_state = play_turn(initial_state, best_move)
-    # print("\n\nGame state after best move:\n")
-    # print_game_state(new_state)
-
-    # # Print the estimated result of the game.
-    # result_message = estimated_game_result(score, players, start_player)
-    # print("\n" + result_message)
 
     # # Simulate and print a possible evolution of the game.
     # print("\nPossible evolution of the game (principal variation):")

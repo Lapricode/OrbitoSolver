@@ -98,6 +98,7 @@ if __name__ == "__main__":
     #     print(s)
 
 
+
 # Initial game state:
 
 # _  _  x  x  
@@ -183,7 +184,6 @@ if __name__ == "__main__":
 # o  x  x  o
 
 
-
 # Initial game state:
 
 # x  o  _  x  
@@ -252,3 +252,201 @@ if __name__ == "__main__":
 # _  x  o  o  
       
 # x  o  x  o
+
+
+# Welcome to the game solver!
+
+# --- Game statistics ---
+# board size (# of side cells):   	4
+# # of total board cells:         	16
+# # of possible board states:     	10165778
+
+
+# Initial game state:
+
+# _  _  _  _  
+      
+# _  _  _  _  
+      
+# _  _  _  _  
+      
+# _  _  _  _  
+
+# Current player: 1
+
+
+# Time taken: 53970.53447508812 sec
+
+
+# Estimated draw
+
+# Perfect game evolution (states with perfect play):
+
+# State after move 0:
+# _  _  _  _  
+      
+# _  _  _  _  
+      
+# _  _  _  _  
+      
+# _  _  _  _  
+
+# Move 1: {'player': 1, 'transfer': None, 'add': (0, 0), 'rotate': '0'}
+# State after move 1:
+# x  _  _  _  
+      
+# _  _  _  _  
+      
+# _  _  _  _  
+      
+# _  _  _  _  
+
+# Move 2: {'player': -1, 'transfer': None, 'add': (0, 1), 'rotate': '0'}
+# State after move 2:
+# x  o  _  _  
+      
+# _  _  _  _  
+      
+# _  _  _  _  
+      
+# _  _  _  _  
+
+# Move 3: {'player': 1, 'transfer': None, 'add': (0, 2), 'rotate': '0'}
+# State after move 3:
+# x  o  x  _  
+      
+# _  _  _  _  
+      
+# _  _  _  _  
+      
+# _  _  _  _  
+
+# Move 4: {'player': -1, 'transfer': None, 'add': (0, 3), 'rotate': '0'}
+# State after move 4:
+# x  o  x  o  
+      
+# _  _  _  _  
+      
+# _  _  _  _  
+      
+# _  _  _  _  
+
+# Move 5: {'player': 1, 'transfer': None, 'add': (1, 0), 'rotate': '0'}
+# State after move 5:
+# x  o  x  o  
+      
+# x  _  _  _  
+      
+# _  _  _  _  
+      
+# _  _  _  _  
+
+# Move 6: {'player': -1, 'transfer': None, 'add': (1, 1), 'rotate': '0'}
+# State after move 6:
+# x  o  x  o  
+      
+# x  o  _  _  
+      
+# _  _  _  _  
+      
+# _  _  _  _  
+
+# Move 7: {'player': 1, 'transfer': None, 'add': (1, 2), 'rotate': '0'}
+# State after move 7:
+# x  o  x  o  
+      
+# x  o  x  _  
+      
+# _  _  _  _  
+      
+# _  _  _  _  
+
+# Move 8: {'player': -1, 'transfer': None, 'add': (1, 3), 'rotate': '0'}
+# State after move 8:
+# x  o  x  o  
+      
+# x  o  x  o  
+      
+# _  _  _  _  
+      
+# _  _  _  _  
+
+# Move 9: {'player': 1, 'transfer': None, 'add': (2, 0), 'rotate': '0'}
+# State after move 9:
+# x  o  x  o  
+      
+# x  o  x  o  
+      
+# x  _  _  _  
+      
+# _  _  _  _  
+
+# Move 10: {'player': -1, 'transfer': None, 'add': (3, 0), 'rotate': '0'}
+# State after move 10:
+# x  o  x  o  
+      
+# x  o  x  o  
+      
+# x  _  _  _  
+      
+# o  _  _  _  
+
+# Move 11: {'player': 1, 'transfer': None, 'add': (2, 1), 'rotate': '0'}
+# State after move 11:
+# x  o  x  o  
+      
+# x  o  x  o  
+      
+# x  x  _  _  
+      
+# o  _  _  _  
+
+# Move 12: {'player': -1, 'transfer': None, 'add': (2, 2), 'rotate': '0'}
+# State after move 12:
+# x  o  x  o  
+      
+# x  o  x  o  
+      
+# x  x  o  _  
+      
+# o  _  _  _  
+
+# Move 13: {'player': 1, 'transfer': None, 'add': (2, 3), 'rotate': '0'}
+# State after move 13:
+# x  o  x  o  
+      
+# x  o  x  o  
+      
+# x  x  o  x  
+      
+# o  _  _  _  
+
+# Move 14: {'player': -1, 'transfer': None, 'add': (3, 1), 'rotate': '0'}
+# State after move 14:
+# x  o  x  o  
+      
+# x  o  x  o  
+      
+# x  x  o  x  
+      
+# o  o  _  _  
+
+# Move 15: {'player': 1, 'transfer': None, 'add': (3, 2), 'rotate': '0'}
+# State after move 15:
+# x  o  x  o  
+      
+# x  o  x  o  
+      
+# x  x  o  x  
+      
+# o  o  x  _  
+
+# Move 16: {'player': -1, 'transfer': None, 'add': (3, 3), 'rotate': '0'}
+# State after move 16:
+# x  o  x  o  
+      
+# x  o  x  o  
+      
+# x  x  o  x  
+      
+# o  o  x  o
