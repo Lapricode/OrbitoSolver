@@ -201,23 +201,28 @@ def solve_game(state, rotate_direction = "clockwise", transfer_allowed = True, p
 if __name__ == "__main__":
     print("Welcome to the game solver!")
     initial_state = np.array([[0, 0, -1], \
-                                [0, 1, 1], \
+                                [1, 0, 1], \
                                 [0, 0, 0]])
     # initial_state = np.array([[1, -1, 0, 1], \
     #                             [0, 0, -1, 0], \
     #                             [0, 0, 0, 1], \
     #                             [-1, 0, 0, 0]])
+    initial_state = np.array([[0, 0, 0, 1], \
+                                [0, 0, -1, 0], \
+                                [0, -1, 0, 0], \
+                                [0, 0, 0, 0]])
     # initial_state = np.zeros((3, 3))
     board_size = initial_state.shape[0]
     print_game_statistics(board_size)
     players = ["x", "o"]
-    start_player = -1
-    rotate_direction = "-"
-    transfer_allowed = True
+    start_player = 1
+    start_player_symbol = players[[1, 0][start_player == 1]]
+    rotate_direction = "0"
+    transfer_allowed = False
     
     print("\n\nInitial game state:\n")
     print_game_state(initial_state)
-    print(f"\n\nCurrent player: {start_player}")
+    print(f"\n\nStart player: {start_player_symbol}")
 
     # Solve the game from the current state.
     start_time = time.time()
@@ -232,13 +237,13 @@ if __name__ == "__main__":
     print("\n" + result_message)
     
     # Print the perfect game evolution.
-    print("\nPerfect game evolution (states with perfect play):\n")
+    print("\nPerfect game evolution:\n")
     player = start_player
     for move_number, s in enumerate(perfect_states_seq):
         print(f"State after move {move_number}:")
         print_game_state(s, players)
         if move_number < len(perfect_moves_seq):
-            print(f"\n\nMove {move_number + 1} ({players[[1, 0][player == 1]]}) : {perfect_moves_seq[move_number]}")
+            print(f"\n\nMove {move_number + 1} ({start_player_symbol}) : {perfect_moves_seq[move_number]}")
             player *= -1
     print("\n")
 
