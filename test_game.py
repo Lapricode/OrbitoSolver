@@ -98,92 +98,6 @@ if __name__ == "__main__":
     #     print(s)
 
 
-
-# Initial game state:
-
-# _  _  x  x  
-      
-# x  o  o  _  
-      
-# _  x  _  _  
-      
-# o  _  _  o  
-
-# Current player: 1
-
-
-# Best move found:
-# {'player': 1, 'transfer': [(1, 2), 'r'], 'add': (0, 1), 'rotate': 'clockwise'}
-
-# Minimax evaluation score: 995
-
-# Time taken: 2865.2060117721558 sec
-
-
-# Estimated win for player 1
-
-# Perfect game evolution (states with perfect play):
-
-# State after move 0:
-# _  _  x  x  
-      
-# x  o  o  _  
-      
-# _  x  _  _  
-      
-# o  _  _  o  
-
-# Move 0: {'player': 1, 'transfer': [(1, 2), 'r'], 'add': (0, 1), 'rotate': 'clockwise'}
-# State after move 1:
-# x  _  x  x  
-      
-# _  x  o  x  
-      
-# o  _  _  o  
-      
-# _  _  o  _  
-
-# Move 1: {'player': -1, 'transfer': [(0, 2), 'l'], 'add': (0, 2), 'rotate': 'clockwise'}
-# State after move 2:
-# _  x  x  o  
-      
-# o  _  x  x  
-      
-# _  _  o  x  
-      
-# _  o  _  o  
-
-# Move 2: {'player': 1, 'transfer': [(3, 1), 'u'], 'add': (1, 1), 'rotate': 'clockwise'}
-# State after move 3:
-# o  _  x  x  
-      
-# _  o  x  o  
-      
-# _  o  x  x  
-      
-# _  _  o  x  
-
-# Move 3: {'player': -1, 'transfer': [(0, 2), 'l'], 'add': (0, 2), 'rotate': 'clockwise'}
-# State after move 4:
-# _  o  x  o  
-      
-# _  o  o  x  
-      
-# _  x  x  o  
-      
-# _  o  x  x  
-
-# Move 4: {'player': 1, 'transfer': [(1, 1), 'l'], 'add': (0, 0), 'rotate': 'clockwise'}
-# State after move 5:
-# o  x  o  x  
-      
-# _  x  _  o  
-      
-# _  x  o  x  
-      
-# o  x  x  o
-
-
 # Initial game state:
 
 # x  o  _  x  
@@ -472,10 +386,7 @@ if __name__ == "__main__":
 
 # Current player: 1
 
-     
  
-
-
 # Time taken: 171310.278 sec
 
 # Player x wins!
