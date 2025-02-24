@@ -200,36 +200,13 @@ def solve_game(state, rotate_direction = "clockwise", transfer_allowed = True, p
 
 if __name__ == "__main__":
     print("Welcome to the game solver!")
-<<<<<<< HEAD
     initial_state = np.array([[0, 0, -1], \
-                                [1, 0, 1], \
-=======
-    initial_state = np.array([[0, 0, 0], \
-                                [0, 0, 0], \
->>>>>>> 9559bce378cf1bd15a51ca94ce43f16bac1be1d7
+                                [-1, 0, 1], \
                                 [0, 0, 0]])
     # initial_state = np.array([[1, -1, 0, 1], \
     #                             [0, 0, -1, 0], \
     #                             [0, 0, 0, 1], \
     #                             [-1, 0, 0, 0]])
-<<<<<<< HEAD
-    initial_state = np.array([[0, 0, 0, 1], \
-                                [0, 0, -1, 0], \
-                                [0, -1, 0, 0], \
-                                [0, 0, 0, 0]])
-    # initial_state = np.zeros((3, 3))
-    board_size = initial_state.shape[0]
-    print_game_statistics(board_size)
-    players = ["x", "o"]
-    start_player = 1
-    start_player_symbol = players[[1, 0][start_player == 1]]
-    rotate_direction = "0"
-    transfer_allowed = False
-    
-    print("\n\nInitial game state:\n")
-    print_game_state(initial_state)
-    print(f"\n\nStart player: {start_player_symbol}")
-=======
     # initial_state = np.zeros((4, 4))
     board_size = initial_state.shape[0]
     print_game_statistics(board_size)
@@ -249,7 +226,6 @@ if __name__ == "__main__":
     # print(f"\n\nBest move found. Time taken: {time.time() - start_time:.3f} sec")
     # print(best_move)
     # print(f"{estimated_game_result(score, players, start_player)} Minimax evaluation score: {score}")
->>>>>>> 9559bce378cf1bd15a51ca94ce43f16bac1be1d7
 
     # Solve the game from the current state.
     start_time = time.time()
@@ -270,7 +246,7 @@ if __name__ == "__main__":
         print(f"State after move {move_number}:")
         print_game_state(s, players)
         if move_number < len(perfect_moves_seq):
-            print(f"\n\nMove {move_number + 1} ({start_player_symbol}) : {perfect_moves_seq[move_number]}")
+            print(f"\n\nMove {move_number + 1} ({players_symbols[start_player]}) : {perfect_moves_seq[move_number]}")
             player *= -1
     print("\n")
 
