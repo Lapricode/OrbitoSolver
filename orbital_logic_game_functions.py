@@ -139,24 +139,28 @@ def get_possible_moves(state, rotate_direction = "clockwise", transfer_allowed =
     return possible_moves
 
 # generate all possible strings of a certain length n with k and l occurrences of two symbols
-def generate_states_strings(n, k, l):
+def generate_states_strings(players_symbols = {1: "x", -1: "o", 0: "_"}, n = 1, k = 1, l = 1):
     '''
+    players_symbols is a dictionary mapping player values to symbols (default: {1: "x", -1: "o", 0: "_"})
     n is the length of the string, k is the number of the first symbol, and l is the number of the second symbol in the string
     '''
-    symbols = ["1", "2", "0"]
     if k + l > n: print("The sum of k and l must not exceed n."); return None
     positions = list(range(n))  # positions in the string
     all_strings = []  # list to store the generated strings
     for x_positions in combinations(positions, k):  # choose k positions for one symbol in the string
         remaining_positions = set(positions) - set(x_positions)  # remaining positions for the other symbols in the string
         for o_positions in combinations(sorted(remaining_positions), l):  # choose l positions for the other symbol in the string
-            s = [str(symbols[2])] * n  # initialize the string with default symbols
+            s = [str(players_symbols[0])] * n  # initialize the string with default symbols
             for pos in x_positions:  # place the first symbol in the chosen related positions
-                s[pos] = str(symbols[0])
+                s[pos] = str(players_symbols[1])
             for pos in o_positions:  # place the second symbol in the chosen related positions
-                s[pos] = str(symbols[1])
+                s[pos] = str(players_symbols[-1])
             all_strings.append(''.join(s))  # add the string to the list
     return all_strings
+
+# convert game states to their respective strings
+def convert_states_to_strings(states):
+    pass 
 
 # convert strings of the game states to their processable form
 def convert_strings_to_states(states_strings, old_symbols = ["1", "2", "0"], new_symbols = [1, -1, 0]):
@@ -187,10 +191,10 @@ def convert_game_state(state, old_symbols = [1, 2, 0], new_symbols = [1, -1, 0])
     return converted_state
 
 # print the game state
-def print_game_state(state, players = ["x", "o"], print_gap_info = [1, "  ", ""]):
+def print_game_state(state, players_symbols = {1: "x", -1: "o", 0: "_"}, print_gap_info = [1, "  ", ""]):
     '''
     print the game state
-    players is a list of the symbols for the players
+    players_symbols is a dictionary mapping player values to symbols (default: {1: "x", -1: "o"})
     print_gap_info is a list with the following elements:
     the number of repeated columns, the gap between columns, and the gap between rows
     '''
@@ -203,12 +207,12 @@ def print_game_state(state, players = ["x", "o"], print_gap_info = [1, "  ", ""]
     for row in range(n):
         for column in range(n):
             if state[row][column] == 1:
-                print(columns_margin + players[0], end = columns_gap)
+                print(columns_margin + players_symbols[1], end = columns_gap)
             elif state[row][column] == -1:
-                print(columns_margin + players[1], end = columns_gap)
+                print(columns_margin + players_symbols[-1], end = columns_gap)
             else:
-                if len(players) > 2:
-                    print(columns_margin + players[2], end = columns_gap)
+                if len(players_symbols) > 2:
+                    print(columns_margin + players_symbols[0], end = columns_gap)
                 else:
                     print(columns_margin + "_", end = columns_gap)
         if row < n - 1:

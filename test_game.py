@@ -30,7 +30,7 @@ if __name__ == "__main__":
     olgf.print_game_statistics(board_size)
     counters = {"1_start_1_win": 0, "1_start_2_win": 0, "2_start_1_win": 0, "2_start_2_win": 0, "1_start_draw": 0, "2_start_draw": 0}
     start_player = 1
-    players = ["x", "o"]
+    players_symbols = {1: "x", -1: "o", 0: "_"}
     rotate_direction = "0"
     transfer_allowed = True
     for i in range(games_played):

@@ -104,12 +104,12 @@ def simulate_principal_variation(state, rotate_direction = "clockwise", player =
         steps += 1
     return evolution
 
-def estimated_game_result(score, players = ["x", "o"], start_player = 1, maximizing_player = None):
+def estimated_game_result(score, players_symbols = {1: "x", -1: "o", 0: "_"}, start_player = 1, maximizing_player = None):
     """
     Returns a message describing the estimated result of the game based on the minimax score.
     Parameters:
         score: the minimax evaluation score
-        players: a list of player symbols (e.g., ["x", "o"])
+        players_symbols: a dictionary mapping player values to symbols (default: {1: "x", -1: "o"})
         start_player: the player who started the game (1 or -1)
         maximizing_player: the player for whom we are optimizing (1 or -1)
     Returns:
@@ -118,9 +118,9 @@ def estimated_game_result(score, players = ["x", "o"], start_player = 1, maximiz
     if maximizing_player is None:
         maximizing_player = start_player
     if score > 0:
-        return f"Player {players[[maximizing_player == 1, maximizing_player == -1][start_player == maximizing_player]]} wins!"
+        return f"Player {players_symbols[[-maximizing_player, maximizing_player][start_player == maximizing_player]]} wins!"
     elif score < 0:
-        return f"Player {players[[maximizing_player == -1, maximizing_player == 1][start_player == maximizing_player]]} wins!"
+        return f"Player {players_symbols[[maximizing_player, -maximizing_player][start_player == maximizing_player]]} wins!"
     elif score == 0:
         return "It's a draw!"
 
@@ -201,7 +201,7 @@ def solve_game(state, rotate_direction = "clockwise", transfer_allowed = True, p
 if __name__ == "__main__":
     print("Welcome to the game solver!")
     initial_state = np.array([[0, 0, -1], \
-                                [-1, 0, 1], \
+                                [-1, 1, 1], \
                                 [0, 0, 0]])
     # initial_state = np.array([[1, -1, 0, 1], \
     #                             [0, 0, -1, 0], \
@@ -211,13 +211,13 @@ if __name__ == "__main__":
     board_size = initial_state.shape[0]
     print_game_statistics(board_size)
     players = ["x", "o"]
-    players_symbols = {1: "x", -1: "o"}
+    players_symbols = {1: "x", -1: "o", 0: "_"}
     start_player = 1
     rotate_direction = "+"
     transfer_allowed = True
     
     print("\n\nInitial game state:\n")
-    print_game_state(initial_state)
+    print_game_state(initial_state, players_symbols)
     print(f"\n\nStart player: {players_symbols[start_player]}")
 
     # # Find the best move and its evaluation score.
@@ -225,7 +225,7 @@ if __name__ == "__main__":
     # best_move, score = find_best_move(initial_state, rotate_direction, transfer_allowed, start_player)
     # print(f"\n\nBest move found. Time taken: {time.time() - start_time:.3f} sec")
     # print(best_move)
-    # print(f"{estimated_game_result(score, players, start_player)} Minimax evaluation score: {score}")
+    # print(f"{estimated_game_result(score, players_symbols, start_player)} Minimax evaluation score: {score}")
 
     # Solve the game from the current state.
     start_time = time.time()
@@ -236,7 +236,7 @@ if __name__ == "__main__":
     perfect_moves_seq = solution["moves_sequence"]
     
     # Print the final evaluation.
-    result_message = estimated_game_result(score, players, start_player)
+    result_message = estimated_game_result(score, players_symbols, start_player)
     print("\n" + result_message)
     
     # Print the perfect game evolution.
@@ -244,7 +244,7 @@ if __name__ == "__main__":
     player = start_player
     for move_number, s in enumerate(perfect_states_seq):
         print(f"State after move {move_number}:")
-        print_game_state(s, players)
+        print_game_state(s, players_symbols)
         if move_number < len(perfect_moves_seq):
             print(f"\n\nMove {move_number + 1} ({players_symbols[start_player]}) : {perfect_moves_seq[move_number]}")
             player *= -1
@@ -255,5 +255,5 @@ if __name__ == "__main__":
     # evolution = simulate_principal_variation(initial_state, rotate_direction, start_player)
     # for move_number, evolution_moment in enumerate(evolution):
     #     print(f"\n\n\nMove {move_number + 1}: \t {evolution_moment['move']}\n")
-    #     print_game_state(evolution_moment["state"])
+    #     print_game_state(evolution_moment["state"], players_symbols)
     # print("\n")
