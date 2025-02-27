@@ -14,12 +14,11 @@ if __name__ == "__main__":
     # state = np.array([[0, 0, 0], \
     #                   [0, 1, 0], \
     #                   [0, 0, 0]])
-    # state = np.array([[1, 2, 2, 2], \
-    #                   [0, 1, 2, 2], \
-    #                   [0, 1, 1, 2], \
-    #                   [1, 1, 0, 2]])
-    state = olgf.convert_game_state(state, old_symbols = [1, 2, 0], new_symbols = processable_symbols)
-    # olgf.print_game_statistics(board_size)
+    # state = np.array([[1, -1, -1, -1], \
+    #                   [0, 1, -1, -1], \
+    #                   [0, 1, 1, -1], \
+    #                   [1, 1, 0, -1]])
+   # olgf.print_game_statistics(board_size)
 
 
     start_time = time.time()

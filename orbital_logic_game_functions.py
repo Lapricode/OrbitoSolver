@@ -159,36 +159,30 @@ def generate_states_strings(players_symbols = {1: "x", -1: "o", 0: "_"}, n = 1, 
     return all_strings
 
 # convert game states to their respective strings
-def convert_states_to_strings(states):
+def convert_states_to_strings(states, players_symbols = {1: "x", -1: "o", 0: "_"}):
+    '''
+    convert game states to their respective strings
+    players_symbols is a dictionary mapping player values to symbols (default: {1: "x", -1: "o", 0: "_"})
+    '''
+    strings_list = []
     pass 
 
 # convert strings of the game states to their processable form
-def convert_strings_to_states(states_strings, old_symbols = ["1", "2", "0"], new_symbols = [1, -1, 0]):
+def convert_strings_to_states(strings, players_symbols = {1: "x",  -1: "o", 0: "_"}):
     '''
     convert strings of the game states to their processable form
-    old_symbols is a list of the symbols in the strings
-    new_symbols is a list of the symbols in the processable form
+    players_symbols is a dictionary mapping player values to symbols (default: {1: "x", -1: "o", 0: "_"})
     '''
-    converted_states = []
-    n = np.sqrt(len(states_strings[0])).astype(int)
-    for state_string in states_strings:
-        converted_state = np.zeros((n, n))
-        for k in range(len(old_symbols)):
-            converted_state[state_string == old_symbols[k]] = new_symbols[k]
-        converted_states.append(converted_state)
-    return converted_states
-
-# convert the game state from its readable form to its processable form
-def convert_game_state(state, old_symbols = [1, 2, 0], new_symbols = [1, -1, 0]):
-    '''
-    convert the game state from its readable form to its processable form
-    old_symbols is a list of the symbols in the readable form
-    new_symbols is a list of the symbols in the processable form
-    '''
-    converted_state = np.copy(state)
-    for k in range(len(old_symbols)):
-        converted_state[state == old_symbols[k]] = new_symbols[k]
-    return converted_state
+    states_list = []
+    string_symbols = list(players_symbols.values())
+    state_symbols = list(players_symbols.keys())
+    n = np.sqrt(len(strings[0])).astype(int)
+    for state_string in strings:
+        state = np.zeros((n, n))
+        for k in range(len(string_symbols)):
+            state[state_string == string_symbols[k]] = state_symbols[k]
+        states_list.append(state)
+    return states_list
 
 # print the game state
 def print_game_state(state, players_symbols = {1: "x", -1: "o", 0: "_"}, print_gap_info = [1, "  ", ""]):

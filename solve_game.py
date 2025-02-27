@@ -200,8 +200,8 @@ def solve_game(state, rotate_direction = "clockwise", transfer_allowed = True, p
 
 if __name__ == "__main__":
     print("Welcome to the game solver!")
-    initial_state = np.array([[0, 0, -1], \
-                                [-1, 1, 1], \
+    initial_state = np.array([[0, 0, 0], \
+                                [-1, 0, 1], \
                                 [0, 0, 0]])
     # initial_state = np.array([[1, -1, 0, 1], \
     #                             [0, 0, -1, 0], \
