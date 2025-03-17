@@ -12,13 +12,14 @@ pygame.init()
 # ---------------------
 
 class InputBox:
-    def __init__(self, x, y, w, h, text=''):
+    def __init__(self, x, y, w, h, font_size, text=''):
         self.rect = pygame.Rect(x, y, w, h)
         self.color_inactive = pygame.Color('lightskyblue3')
         self.color_active = pygame.Color('dodgerblue2')
         self.color = self.color_inactive
         self.text = text
-        self.font = pygame.font.Font(None, 28)
+        self.font_size = font_size
+        self.font = pygame.font.Font(None, self.font_size)
         self.txt_surface = self.font.render(text, True, pygame.Color('black'))
         self.active = False
 
@@ -45,14 +46,15 @@ class InputBox:
         pygame.draw.rect(screen, self.color, self.rect, 2)
 
 class Button:
-    def __init__(self, x, y, w, h, text, callback=None):
+    def __init__(self, x, y, w, h, font_size, text, callback=None):
         self.rect = pygame.Rect(x, y, w, h)
         self.normal_color = pygame.Color('gray')
         self.hover_color = pygame.Color('lightgray')
         self.pressed_color = pygame.Color('darkgray')
         self.text = text
-        self.font = pygame.font.Font(None, 28)
-        self.txt_surface = self.font.render(text, True, pygame.Color('black'))
+        self.font_size = font_size
+        self.font = pygame.font.Font(None, self.font_size)
+        self.txt_surface = self.font.render(self.text, True, pygame.Color('black'))
         self.callback = callback
         self.is_pressed = False
 
@@ -80,11 +82,12 @@ class Button:
         screen.blit(self.txt_surface, text_rect)
 
 class Checkbox:
-    def __init__(self, x, y, size, text, checked=False):
+    def __init__(self, x, y, size, font_size, text, checked=False):
         self.rect = pygame.Rect(x, y, size, size)
         self.checked = checked
         self.text = text
-        self.font = pygame.font.Font(None, 28)
+        self.font_size = font_size
+        self.font = pygame.font.Font(None, self.font_size)
 
     def handle_event(self, event):
         if event.type == pygame.MOUSEBUTTONDOWN:
@@ -101,13 +104,14 @@ class Checkbox:
         screen.blit(txt_surface, (self.rect.right + 5, self.rect.y))
 
 class RadioButton:
-    def __init__(self, x, y, radius, text, selected=False):
+    def __init__(self, x, y, radius, font_size, text, selected=False):
         self.x = x
         self.y = y
         self.radius = radius
         self.text = text
+        self.font_size = font_size
         self.selected = selected
-        self.font = pygame.font.Font(None, 28)
+        self.font = pygame.font.Font(None, self.font_size)
         self.circle_rect = pygame.Rect(x - radius, y - radius, 2*radius, 2*radius)
 
     def handle_event(self, event, group):
@@ -178,10 +182,10 @@ def draw_board(screen, board_state, board_rect, hover_cell, selections, font):
 
 def main():
     # Window dimensions.
-    WINDOW_WIDTH, WINDOW_HEIGHT = 800, 600
+    BOARD_WIDTH = 600
     MENU_WIDTH = 300
-    BOARD_WIDTH = WINDOW_WIDTH - MENU_WIDTH
-    BOARD_HEIGHT = WINDOW_HEIGHT
+    BOARD_HEIGHT = BOARD_WIDTH
+    WINDOW_WIDTH, WINDOW_HEIGHT = BOARD_WIDTH + MENU_WIDTH, BOARD_WIDTH
     screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
     pygame.display.set_caption("Orbital Logic Game")
     clock = pygame.time.Clock()
@@ -215,8 +219,8 @@ def main():
     # ---------------- Menu Layout for Settings ----------------
     menu_area = pygame.Rect(BOARD_WIDTH, 0, MENU_WIDTH, WINDOW_HEIGHT)
     num_items = 11
-    margin_top = 30
-    margin_bottom = 30
+    margin_top = 20
+    margin_bottom = 20
     available_height = menu_area.height - margin_top - margin_bottom
     spacing = available_height / (num_items)
 
@@ -235,16 +239,21 @@ def main():
 
     menu_start_x = BOARD_WIDTH + 20
 
-    title_font = pygame.font.Font(None, 36)
-    menu_font  = pygame.font.Font(None, 28)
-
-    grid_size_box = InputBox(menu_start_x + 120, input_y, 50, 32, text="4")
-    transfer_checkbox = Checkbox(menu_start_x, transfer_cb_y, 20, "Allow Transfer Moves", checked=True)
-    rotation_checkbox = Checkbox(menu_start_x, rotation_cb_y, 20, "Allow Rotation", checked=True)
-    rb_game1 = RadioButton(menu_start_x, rb_game1_y, 10, "2 Players", selected=True)
-    rb_game2 = RadioButton(menu_start_x, rb_game2_y, 10, "Vs Computer", selected=False)
-    rb_move1 = RadioButton(menu_start_x, rb_move1_y, 10, "Auto Move Completion", selected=True)
-    rb_move2 = RadioButton(menu_start_x, rb_move2_y, 10, "Manual Move Completion", selected=False)
+    menu_title_font   = pygame.font.Font(None, 44)
+    menu_options_font = pygame.font.Font(None, 30)
+    game_mode_font    = pygame.font.Font(None, 40)
+    InputBox_font    = 28
+    Button_font      = 28
+    Checkbox_font    = 28
+    RadioButton_font = 28
+    
+    grid_size_box = InputBox(menu_start_x + 130, input_y, 60, 30, InputBox_font, text="4")
+    transfer_checkbox = Checkbox(menu_start_x, transfer_cb_y, 20, Checkbox_font, "Allow Transfer Moves", checked=True)
+    rotation_checkbox = Checkbox(menu_start_x, rotation_cb_y, 20, Checkbox_font, "Allow Rotation", checked=True)
+    rb_game1 = RadioButton(menu_start_x, rb_game1_y, 10, RadioButton_font, "2 Players", selected=True)
+    rb_game2 = RadioButton(menu_start_x, rb_game2_y, 10, RadioButton_font, "Vs Computer", selected=False)
+    rb_move1 = RadioButton(menu_start_x, rb_move1_y, 10, RadioButton_font, "Auto Move Completion", selected=True)
+    rb_move2 = RadioButton(menu_start_x, rb_move2_y, 10, RadioButton_font, "Manual Move Completion", selected=False)
 
     def start_game():
         nonlocal mode_state, board_state, current_player, game_over, game_message
@@ -266,15 +275,22 @@ def main():
         move_completion_mode = "manual" if rb_move2.selected else "auto"
         reset_turn()
         mode_state = "playing"
-    start_button = Button(menu_start_x, start_button_y, 160, 40, "Start Game", start_game)
+    start_button = Button(menu_start_x, start_button_y, 260, 60, Button_font, "Start Game", start_game)
 
     # ---------------- In-Game UI Elements (Fixed Positions) ----------------
     # These four buttons are always shown in game mode.
     game_menu_x = BOARD_WIDTH + 20
-    restart_button = Button(game_menu_x, 50, 160, 40, "Restart")
-    new_game_button = Button(game_menu_x, 110, 160, 40, "New Game")
-    take_back_button = Button(game_menu_x, 170, 160, 40, "Take Back")
-    complete_move_button = Button(game_menu_x, 230, 160, 40, "Complete Move")
+    game_mode_buttons_length = 260
+    game_mode_buttons_height = 60
+    game_mode_buttons_spacing = 80
+    restart_button_y = 150
+    new_game_button_y = restart_button_y + game_mode_buttons_spacing
+    take_back_button_y = new_game_button_y + game_mode_buttons_spacing
+    complete_move_button_y = take_back_button_y + game_mode_buttons_spacing
+    restart_button = Button(game_menu_x, restart_button_y, game_mode_buttons_length, game_mode_buttons_height, Button_font, "Restart")
+    new_game_button = Button(game_menu_x, new_game_button_y, game_mode_buttons_length, game_mode_buttons_height, Button_font, "New Game")
+    take_back_button = Button(game_menu_x, take_back_button_y, game_mode_buttons_length, game_mode_buttons_height, Button_font, "Take Back")
+    complete_move_button = Button(game_menu_x, complete_move_button_y, game_mode_buttons_length, game_mode_buttons_height, Button_font, "Complete Move")
 
     # Set up confirmation callbacks for Restart and New Game.
     def on_restart_button():
@@ -385,8 +401,8 @@ def main():
         confirm_action = None
 
     # Create confirmation dialog buttons.
-    confirm_yes_button = Button(confirm_box_rect.x + 30, confirm_box_rect.y + 140, 100, 40, "Yes", confirm_yes)
-    confirm_no_button = Button(confirm_box_rect.x + 170, confirm_box_rect.y + 140, 100, 40, "No", confirm_no)
+    confirm_yes_button = Button(confirm_box_rect.x + 30, confirm_box_rect.y + 140, 100, 40, Button_font, "Yes", confirm_yes)
+    confirm_no_button = Button(confirm_box_rect.x + 170, confirm_box_rect.y + 140, 100, 40, Button_font, "No", confirm_no)
 
     # ---------------- Main Loop ----------------
     running = True
@@ -479,30 +495,33 @@ def main():
         screen.fill((200, 200, 200))
         if mode_state == "menu":
             pygame.draw.rect(screen, (220, 220, 220), (BOARD_WIDTH, 0, MENU_WIDTH, WINDOW_HEIGHT))
-            title_surface = title_font.render("Game Settings", True, pygame.Color('black'))
+            title_surface = menu_title_font.render("Game Settings", True, pygame.Color('black'))
             screen.blit(title_surface, (menu_start_x, title_y))
-            grid_label = menu_font.render("Grid Size:", True, pygame.Color('black'))
+            grid_label = menu_options_font.render("Grid Size:", True, pygame.Color('black'))
             screen.blit(grid_label, (menu_start_x, grid_label_y))
             grid_size_box.draw(screen)
             transfer_checkbox.draw(screen)
             rotation_checkbox.draw(screen)
-            game_mode_label = menu_font.render("Game Mode:", True, pygame.Color('black'))
+            game_mode_label = menu_options_font.render("Game Mode:", True, pygame.Color('black'))
             screen.blit(game_mode_label, (menu_start_x, game_mode_label_y))
             rb_game1.draw(screen)
             rb_game2.draw(screen)
-            move_mode_label = menu_font.render("Move Completion:", True, pygame.Color('black'))
+            move_mode_label = menu_options_font.render("Move Completion:", True, pygame.Color('black'))
             screen.blit(move_mode_label, (menu_start_x, move_mode_label_y))
             rb_move1.draw(screen)
             rb_move2.draw(screen)
             start_button.draw(screen)
         elif mode_state == "playing":
-            draw_board(screen, board_state, board_rect, hover_cell, selections, menu_font)
+            draw_board(screen, board_state, board_rect, hover_cell, selections, menu_options_font)
             pygame.draw.rect(screen, (220, 220, 220), (BOARD_WIDTH, 0, MENU_WIDTH, WINDOW_HEIGHT))
-            info_text = "Turn: Black" if current_player == 1 else "Turn: White"
             if game_over:
                 info_text = game_message
-            info_surface = menu_font.render(info_text, True, pygame.Color('black'))
-            screen.blit(info_surface, (menu_start_x, 10))
+                info_surface = game_mode_font.render(info_text, True, pygame.Color('black'))
+                screen.blit(info_surface, (menu_start_x, BOARD_HEIGHT - 40))
+            else:
+            	info_text = "Turn: Black" if current_player == 1 else "Turn: White"
+            	info_surface = game_mode_font.render(info_text, True, pygame.Color('black'))
+            	screen.blit(info_surface, (menu_start_x, 20))
             # Always show Restart, New Game, Take Back, and Complete Move buttons.
             restart_button.draw(screen)
             new_game_button.draw(screen)
@@ -518,7 +537,7 @@ def main():
                 confirm_text = "Restart game?"
             elif confirm_action == "new_game":
                 confirm_text = "Return to main menu?"
-            confirm_surface = title_font.render(confirm_text, True, pygame.Color('black'))
+            confirm_surface = menu_options_font.render(confirm_text, True, pygame.Color('black'))
             screen.blit(confirm_surface, (confirm_box_rect.x + 20, confirm_box_rect.y + 40))
             confirm_yes_button.draw(screen)
             confirm_no_button.draw(screen)
