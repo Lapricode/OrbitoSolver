@@ -3,6 +3,11 @@ import math as m
 from itertools import combinations
 
 
+# important global variables for the functions
+clockwise_rotation_keywords = ["clockwise", "cw", "-", "-1"]
+counterclockwise_rotation_keywords = ["counterclockwise", "ccw", "+", "1"]
+stand_still_keywords = ["still", "s", "x", "0"]
+
 # evaluate and score the game state
 def evaluate_game_state(state):
     '''
@@ -38,13 +43,13 @@ def rotate_board(state, rotate_direction = "clockwise"):
                     [(i, n - layer - 1) for i in range(layer + 1, n - layer - 1)] + \
                     [(n - layer - 1, j) for j in range(n - layer - 1, layer - 1, -1)] + \
                     [(i, layer) for i in range(n - layer - 2, layer, -1)])
-        if rotate_direction.lower() in ["clockwise", "cw", "-", "-1"]:
+        if rotate_direction.lower() in clockwise_rotation_keywords:
             for k in range(len(elements)):
                 rotated_state[elements[k]] = state[elements[k - 1]]
-        elif rotate_direction.lower() in ["counterclockwise", "ccw", "+", "1"]:
+        elif rotate_direction.lower() in counterclockwise_rotation_keywords:
             for k in range(len(elements)):
                 rotated_state[elements[k]] = state[elements[(k + 1) % len(elements)]]
-        elif rotate_direction.lower() in ["still", "s", "x", "0"]:
+        elif rotate_direction.lower() in stand_still_keywords:
             continue
         else:
             print("Direction must be \"clockwise\", \"counterclockwise\", or \"still\".")
@@ -138,11 +143,35 @@ def get_possible_moves(state, rotate_direction = "clockwise", transfer_allowed =
                                         possible_moves.append({"player": player, "transfer": [(row, column), transfer_direction], "add": (i, j), "rotate": rotate_direction})
     return possible_moves
 
+# rotate the board 90 degrees, clockwise or counterclockwise, where the board state is given as a string
+def rotate_90_degrees(state_string, rotate_direction = "clockwise", rotate_times = 1):
+    '''
+    return the new state (as a string), after the "rotate_direction" given (as 90 degrees steps) is applied "rotate_times" times on the "state_string" state
+    the board size is n
+              state             string
+    old cell: (i, j)            k = ni+j
+    new cell: (j, n-1-i)        nj+n-1-i = nk+n-1-(n^2+1)(k//n)             clockwise rotation
+              (n-1-j, i)        n(n-1-j)+i = n(n-1-k)+(n^2+1)(k//n)         counterclockwise rotation
+              (n-1-i, n-1-j)    n(n-1-i)+(n-1-j) = n^2-1-k                  double clockwise/counterclockwise rotation
+    '''
+    n = int(len(state_string)**0.5)
+    new_state_string = len(state_string) * ["_"]
+    for k in range(len(state_string)):
+        if rotate_direction in clockwise_rotation_keywords and rotate_times % 4 == 1 or rotate_direction in counterclockwise_rotation_keywords and rotate_times % 4 == 3:
+            new_state_string[int(n*k+n-1-(n**2+1)*(k//n))] = state_string[k]
+        elif rotate_direction in clockwise_rotation_keywords and rotate_times % 4 == 3 or rotate_direction in counterclockwise_rotation_keywords and rotate_times % 4 == 1:
+            new_state_string[int(n*(n-1-k)+(n**2+1)*(k//n))] = state_string[k]
+        elif rotate_times % 4 == 2 and rotate_direction not in stand_still_keywords:
+            new_state_string[n**2-1-k] = state_string[k]
+        else:
+            return state_string
+    return "".join(new_state_string)
+
 # generate all possible strings of a certain length n with k and l occurrences of two symbols
-def generate_states_strings(players_symbols = {1: "x", -1: "o", 0: "_"}, n = 4, k = 1, l = 1):
+def generate_state_strings(players_symbols = {1: "x", -1: "o", 0: "_"}, n = 4, k = 1, l = 1):
     '''
     players_symbols is a dictionary mapping player symbols to values (default: {1: "x", -1: "o", 0: "_"})
-    n is the length of the string, k is the number of the first symbol, and l is the number of the second symbol in the string
+    n is the length of the string, k is the number of times the first symbol appears (player 1 /1), and l is the number of times the second symbol appears (player 2 /-1)
     '''
     if k + l > n: print("The sum of k and l must not exceed n."); return None
     positions = list(range(n))  # positions in the string
@@ -157,6 +186,17 @@ def generate_states_strings(players_symbols = {1: "x", -1: "o", 0: "_"}, n = 4, 
                 s[pos] = str(players_symbols[-1])
             all_strings.append(''.join(s))  # add the string to the list
     return all_strings
+
+def number_state_strings(state_strings, players_symbols = {1: "x", -1: "o", 0: "_"}):
+    '''
+    number game states for easier and overall better identification, using the base-3 arithmetic system
+    players_symbols is a dictionary mapping player symbols to values (default: {1: "x", -1: "o", 0: "_"})
+    '''
+    values = []
+    for s in state_strings:
+        s2 = s.replace(players_symbols[0], "0").replace(players_symbols[1], "1").replace(players_symbols[-1], "2")
+        values.append(int(s2, 3))
+    return values
 
 # convert game states to their respective strings
 def convert_states_to_strings(states, players_symbols = {1: "x", -1: "o", 0: "_"}):
@@ -180,7 +220,7 @@ def convert_strings_to_states(strings, players_symbols = {1: "x", -1: "o", 0: "_
         if n * n != len(s):
             raise ValueError(f"String '{s}' does not represent a square board.")
         state = [[inverse_mapping[s[r * n + c]] for c in range(n)] for r in range(n)]
-        states.append(state)
+        states.append(np.array(state))
     return states
 
 # print the game state
@@ -189,7 +229,7 @@ def print_game_state(state, players_symbols = {1: "x", -1: "o", 0: "_"}, print_g
     print the game state
     players_symbols is a dictionary mapping player values to symbols (default: {1: "x", -1: "o"})
     print_gap_info is a list with the following elements:
-    the number of repeated columns, the gap between columns, and the gap between rows
+        the number of repeated columns, the gap between columns, and the gap between rows
     '''
     n = state.shape[0]
     state = state.tolist()

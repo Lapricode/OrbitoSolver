@@ -1,7 +1,7 @@
 import math
 import numpy as np
 import time
-from orbital_logic_game_functions import evaluate_game_state, get_possible_moves, play_turn, print_game_state, print_game_statistics
+import orbital_logic_game_functions as olgf
 
 
 def minimax(state, rotate_direction = "clockwise", transfer_allowed = True, player = 1, maximizing_player = None, depth = 0, alpha = -math.inf, beta = math.inf):
@@ -19,7 +19,7 @@ def minimax(state, rotate_direction = "clockwise", transfer_allowed = True, play
     Returns:
         An evaluation score: high positive if maximizing_player wins, high negative if loses, or 0 for a draw.
     """
-    result = evaluate_game_state(state)
+    result = olgf.evaluate_game_state(state)
     if result is not None:
         # Terminal state reached
         if result == 0:
@@ -31,14 +31,14 @@ def minimax(state, rotate_direction = "clockwise", transfer_allowed = True, play
             return -1000 + depth  # slower loss is slightly better
 
     # Get all possible moves for the current player.
-    moves = get_possible_moves(state, rotate_direction, transfer_allowed, player)
+    moves = olgf.get_possible_moves(state, rotate_direction, transfer_allowed, player)
     if not moves:
         return 0  # No moves available means a draw (should not normally happen)
 
     if player == maximizing_player:
         max_eval = -math.inf
         for move in moves:
-            new_state = play_turn(state, move)
+            new_state = olgf.play_turn(state, move)
             eval = minimax(new_state, rotate_direction, transfer_allowed, -player, maximizing_player, depth + 1, alpha, beta)
             max_eval = max(max_eval, eval)
             alpha = max(alpha, eval)
@@ -48,7 +48,7 @@ def minimax(state, rotate_direction = "clockwise", transfer_allowed = True, play
     else:
         min_eval = math.inf
         for move in moves:
-            new_state = play_turn(state, move)
+            new_state = olgf.play_turn(state, move)
             eval = minimax(new_state, rotate_direction, transfer_allowed, -player, maximizing_player, depth + 1, alpha, beta)
             min_eval = min(min_eval, eval)
             beta = min(beta, eval)
@@ -68,10 +68,10 @@ def find_best_move(state, rotate_direction = "clockwise", transfer_allowed = Tru
     """
     best_move = None
     best_value = -math.inf
-    moves = get_possible_moves(state, rotate_direction, transfer_allowed, player)
+    moves = olgf.get_possible_moves(state, rotate_direction, transfer_allowed, player)
 
     for move in moves:
-        new_state = play_turn(state, move)
+        new_state = olgf.play_turn(state, move)
         move_value = minimax(new_state, rotate_direction, transfer_allowed, -player, player, depth = 1, alpha = -math.inf, beta = math.inf)
         if move_value > best_value:
             best_value = move_value
@@ -93,12 +93,12 @@ def simulate_principal_variation(state, rotate_direction = "clockwise", player =
     current_player = player
     steps = 0
     while steps < max_steps:
-        if evaluate_game_state(current_state) is not None:
+        if olgf.evaluate_game_state(current_state) is not None:
             break
         best_move, score = find_best_move(current_state, rotate_direction, transfer_allowed, current_player)
         if best_move is None:
             break
-        current_state = play_turn(current_state, best_move)
+        current_state = olgf.play_turn(current_state, best_move)
         evolution.append({"move": best_move, "state": current_state})
         current_player = -current_player
         steps += 1
@@ -148,7 +148,7 @@ def solve_game(state, rotate_direction = "clockwise", transfer_allowed = True, p
         maximizing_player = player
 
     # Check if the current state is terminal.
-    result = evaluate_game_state(state)
+    result = olgf.evaluate_game_state(state)
     if result is not None:
         if result == 0:
             return {"score": 0, "states_sequence": [state], "moves_sequence": []}
@@ -157,7 +157,7 @@ def solve_game(state, rotate_direction = "clockwise", transfer_allowed = True, p
         else:
             return {"score": -1000 + depth, "states_sequence": [state], "moves_sequence": []}
 
-    moves = get_possible_moves(state, rotate_direction, transfer_allowed, player)
+    moves = olgf.get_possible_moves(state, rotate_direction, transfer_allowed, player)
     if not moves:
         return {"score": 0, "states_sequence": [state], "moves_sequence": []}
 
@@ -167,7 +167,7 @@ def solve_game(state, rotate_direction = "clockwise", transfer_allowed = True, p
         best_state_seq = None
         best_moves_seq = None
         for move in moves:
-            new_state = play_turn(state, move)
+            new_state = olgf.play_turn(state, move)
             child = solve_game(new_state, rotate_direction, transfer_allowed, -player, maximizing_player, depth + 1, alpha, beta)
             child_eval = child["score"]
             if child_eval > best_eval:
@@ -185,7 +185,7 @@ def solve_game(state, rotate_direction = "clockwise", transfer_allowed = True, p
         best_state_seq = None
         best_moves_seq = None
         for move in moves:
-            new_state = play_turn(state, move)
+            new_state = olgf.play_turn(state, move)
             child = solve_game(new_state, rotate_direction, transfer_allowed, -player, maximizing_player, depth + 1, alpha, beta)
             child_eval = child["score"]
             if child_eval < best_eval:
@@ -214,14 +214,14 @@ if __name__ == "__main__":
     rotate_direction = "+"
     transfer_allowed = True
     
-    print_game_statistics(board_size)
+    olgf.print_game_statistics(board_size)
     print("\nGame rules:")
     print(f"  - Board size:          {board_size}x{board_size}")
     print(f"  - Players:             {players_symbols[1]} and {players_symbols[-1]}")
     print(f"  - Rotation direction:  {rotate_direction}")
     print(f"  - Transfers allowed:   {transfer_allowed}")
     print("\n\nInitial game state:\n")
-    print_game_state(initial_state, players_symbols)
+    olgf.print_game_state(initial_state, players_symbols)
     print(f"\n\nStart player: {players_symbols[start_player]}")
 
     # # Find the best move and its evaluation score.
@@ -248,7 +248,7 @@ if __name__ == "__main__":
     player = start_player
     for move_number, s in enumerate(perfect_states_seq):
         print(f"State after move {move_number}:")
-        print_game_state(s, players_symbols)
+        olgf.print_game_state(s, players_symbols)
         if move_number < len(perfect_moves_seq):
             print(f"\n\nMove {move_number + 1} ({players_symbols[start_player]}) : {perfect_moves_seq[move_number]}")
             player *= -1
@@ -259,5 +259,5 @@ if __name__ == "__main__":
     # evolution = simulate_principal_variation(initial_state, rotate_direction, start_player)
     # for move_number, evolution_moment in enumerate(evolution):
     #     print(f"\n\n\nMove {move_number + 1}: \t {evolution_moment['move']}\n")
-    #     print_game_state(evolution_moment["state"], players_symbols)
+    #     olgf.print_game_state(evolution_moment["state"], players_symbols)
     # print("\n")

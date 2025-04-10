@@ -1,5 +1,6 @@
 import numpy as np
 import time
+import itertools
 import orbital_logic_game_functions as olgf
 
 
@@ -83,18 +84,40 @@ if __name__ == "__main__":
     #                   [1, 1, 0, -1]])
     # olgf.print_game_statistics(board_size)
 
-    check_game_play_probabilities(board_size, 10000, False)
+    # test 1:
+    # check_game_play_probabilities(board_size, 10000, False)
     
-    # Example usage:
-    n = 4
-    k = 1
-    l = 1
-
-    all_strings = olgf.generate_states_strings(players_symbols, n, k, l)
+    # test 2:
+    board_size = 3
+    olgf.print_game_statistics(board_size)
+    all_strings = []
+    for pair in itertools.product(list(range(board_size**2)), repeat = 2):
+        if abs(pair[0] - pair[1]) <= 1 and pair[0] + pair[1] <= board_size**2:
+            all_strings += olgf.generate_state_strings(players_symbols, board_size**2, pair[0], pair[1])
     print(f"Total strings: {len(all_strings)}")
-    # Print a few example strings:
-    for s in all_strings[:]:
-        print((" ").join(list(s)))
+    # for s in all_strings[:]:
+    #     print((" ").join(list(s)))
+    
+    # test 3:
+    # max = 0
+    # s_max = ""
+    # for s in all_strings:
+    #     s2 = s.replace(players_symbols[0], "0").replace(players_symbols[1], "1").replace(players_symbols[-1], "2")
+    #     if int(s2, 3) > max:
+    #         max = int(s2, 3)
+    #         s_max = s
+    # print(max, s_max)
+
+    # test 4:
+    state = "x_x_ooxxo"
+    state_strings = [state, olgf.rotate_90_degrees(state, "cw", 1), olgf.rotate_90_degrees(state, "cw", 2), olgf.rotate_90_degrees(state, "cw", 3), \
+                            olgf.rotate_90_degrees(state, "ccw", 1), olgf.rotate_90_degrees(state, "ccw", 2), olgf.rotate_90_degrees(state, "ccw", 3)]
+    states = olgf.convert_strings_to_states(state_strings, players_symbols)
+    for k in states:
+        print("\n\n")
+        olgf.print_game_state(k, players_symbols)
+    print("\n\n")
+    print(olgf.number_state_strings(state_strings, players_symbols))
 
 
 # Initial game state:
