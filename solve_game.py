@@ -199,9 +199,9 @@ def solve_game(state, rotate_direction = "clockwise", transfer_allowed = True, p
 
 
 if __name__ == "__main__":
-    print("Welcome to the game solver!")
+    print("Welcome to the \"Orbital Logic Game\" solver!")
     initial_state = np.array([[0, 0, 0], \
-                                [-1, 0, 1], \
+                                [0, 0, 0], \
                                 [0, 0, 0]])
     # initial_state = np.array([[1, -1, 0, 1], \
     #                             [0, 0, -1, 0], \
@@ -209,13 +209,17 @@ if __name__ == "__main__":
     #                             [-1, 0, 0, 0]])
     # initial_state = np.zeros((4, 4))
     board_size = initial_state.shape[0]
-    print_game_statistics(board_size)
-    players = ["x", "o"]
     players_symbols = {1: "x", -1: "o", 0: "_"}
     start_player = 1
     rotate_direction = "+"
     transfer_allowed = True
     
+    print_game_statistics(board_size)
+    print("\nGame rules:")
+    print(f"  - Board size:          {board_size}x{board_size}")
+    print(f"  - Players:             {players_symbols[1]} and {players_symbols[-1]}")
+    print(f"  - Rotation direction:  {rotate_direction}")
+    print(f"  - Transfers allowed:   {transfer_allowed}")
     print("\n\nInitial game state:\n")
     print_game_state(initial_state, players_symbols)
     print(f"\n\nStart player: {players_symbols[start_player]}")

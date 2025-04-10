@@ -186,7 +186,7 @@ def main():
     MENU_WIDTH = 300
     BOARD_HEIGHT = BOARD_WIDTH
     WINDOW_WIDTH, WINDOW_HEIGHT = BOARD_WIDTH + MENU_WIDTH, BOARD_WIDTH
-    screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
+    screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.RESIZABLE)
     pygame.display.set_caption("Orbital Logic Game")
     clock = pygame.time.Clock()
 
@@ -400,6 +400,9 @@ def main():
         confirm_box_active = False
         confirm_action = None
 
+    def handle_resize(new_width, new_height):
+        pass
+
     # Create confirmation dialog buttons.
     confirm_yes_button = Button(confirm_box_rect.x + 30, confirm_box_rect.y + 140, 100, 40, Button_font, "Yes", confirm_yes)
     confirm_no_button = Button(confirm_box_rect.x + 170, confirm_box_rect.y + 140, 100, 40, Button_font, "No", confirm_no)
@@ -421,6 +424,8 @@ def main():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+            elif event.type == pygame.VIDEORESIZE:
+                handle_resize(event.w, event.h)
 
             # If confirmation dialog is active, only process its events.
             if confirm_box_active:
@@ -519,9 +524,9 @@ def main():
                 info_surface = game_mode_font.render(info_text, True, pygame.Color('black'))
                 screen.blit(info_surface, (menu_start_x, BOARD_HEIGHT - 40))
             else:
-            	info_text = "Turn: Black" if current_player == 1 else "Turn: White"
-            	info_surface = game_mode_font.render(info_text, True, pygame.Color('black'))
-            	screen.blit(info_surface, (menu_start_x, 20))
+                info_text = "Turn: Black" if current_player == 1 else "Turn: White"
+                info_surface = game_mode_font.render(info_text, True, pygame.Color('black'))
+                screen.blit(info_surface, (menu_start_x, 20))
             # Always show Restart, New Game, Take Back, and Complete Move buttons.
             restart_button.draw(screen)
             new_game_button.draw(screen)
@@ -541,7 +546,7 @@ def main():
             screen.blit(confirm_surface, (confirm_box_rect.x + 20, confirm_box_rect.y + 40))
             confirm_yes_button.draw(screen)
             confirm_no_button.draw(screen)
-        
+
         pygame.display.flip()
         clock.tick(30)
 

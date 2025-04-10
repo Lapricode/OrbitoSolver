@@ -139,9 +139,9 @@ def get_possible_moves(state, rotate_direction = "clockwise", transfer_allowed =
     return possible_moves
 
 # generate all possible strings of a certain length n with k and l occurrences of two symbols
-def generate_states_strings(players_symbols = {1: "x", -1: "o", 0: "_"}, n = 1, k = 1, l = 1):
+def generate_states_strings(players_symbols = {1: "x", -1: "o", 0: "_"}, n = 4, k = 1, l = 1):
     '''
-    players_symbols is a dictionary mapping player values to symbols (default: {1: "x", -1: "o", 0: "_"})
+    players_symbols is a dictionary mapping player symbols to values (default: {1: "x", -1: "o", 0: "_"})
     n is the length of the string, k is the number of the first symbol, and l is the number of the second symbol in the string
     '''
     if k + l > n: print("The sum of k and l must not exceed n."); return None
@@ -162,27 +162,26 @@ def generate_states_strings(players_symbols = {1: "x", -1: "o", 0: "_"}, n = 1, 
 def convert_states_to_strings(states, players_symbols = {1: "x", -1: "o", 0: "_"}):
     '''
     convert game states to their respective strings
-    players_symbols is a dictionary mapping player values to symbols (default: {1: "x", -1: "o", 0: "_"})
+    players_symbols is a dictionary mapping player symbols to values (default: {1: "x", -1: "o", 0: "_"})
     '''
-    strings_list = []
-    pass 
+    strings = ["".join(players_symbols[cell] for row in state for cell in row) for state in states]
+    return strings
 
 # convert strings of the game states to their processable form
-def convert_strings_to_states(strings, players_symbols = {1: "x",  -1: "o", 0: "_"}):
+def convert_strings_to_states(strings, players_symbols = {1: "x", -1: "o", 0: "_"}):
     '''
     convert strings of the game states to their processable form
-    players_symbols is a dictionary mapping player values to symbols (default: {1: "x", -1: "o", 0: "_"})
+    players_symbols is a dictionary mapping player symbols to values (default: {1: "x", -1: "o", 0: "_"})
     '''
-    states_list = []
-    string_symbols = list(players_symbols.values())
-    state_symbols = list(players_symbols.keys())
-    n = np.sqrt(len(strings[0])).astype(int)
-    for state_string in strings:
-        state = np.zeros((n, n))
-        for k in range(len(string_symbols)):
-            state[state_string == string_symbols[k]] = state_symbols[k]
-        states_list.append(state)
-    return states_list
+    inverse_mapping = {v: k for k, v in players_symbols.items()}
+    states = []
+    for s in strings:
+        n = int(len(s) ** 0.5)
+        if n * n != len(s):
+            raise ValueError(f"String '{s}' does not represent a square board.")
+        state = [[inverse_mapping[s[r * n + c]] for c in range(n)] for r in range(n)]
+        states.append(state)
+    return states
 
 # print the game state
 def print_game_state(state, players_symbols = {1: "x", -1: "o", 0: "_"}, print_gap_info = [1, "  ", ""]):
@@ -226,16 +225,26 @@ def print_game_statistics(board_size):
     print some game statistics
     '''
     board_cells = board_size ** 2
-    possible_board_states = 0
+    possible_board_states = 1  # the case of a blank grid
     # calculate the number of possible board states starting with the same player (else it is double that number)
     # not accounting for rotational symmetries
     for k in range(1, board_cells + 1):
         # print(multinomial(board_cells, int(np.floor(k / 2)), int(np.ceil(k / 2))))
-        possible_board_states += multinomial(board_cells, int(np.floor(k / 2)), int(np.ceil(k / 2)))
+        possible_board_states += 2**(k%2) * multinomial(board_cells, int(np.floor(k / 2)), int(np.ceil(k / 2)))
     # accounting for rotational symmetries
     
     print("\n--- Game statistics ---")
     align_gap = 1
-    print("board size (# of side cells):   " + "\t" + f"{board_size}")
-    print("# of total board cells:         " + "\t" + f"{board_cells}")
-    print("# of possible board states:     " + "\t" + f"{possible_board_states}")
+    print("# board dimension (board size):     " + f"{board_size}")
+    print("# of total board cells:             " + f"{board_cells}")
+    print("# of possible board states:         " + f"{possible_board_states}" + "\t(including the blank grid case)")
+    print("# of possible states wrt 1 player:  " + f"{int((possible_board_states - 1) / 2)}" + "\t(excluding the blank grid case)")
+
+
+# generated_string = generate_states_strings(players_symbols = {1: "x", -1: "o", 0: "_"}, n = 9, k = 3, l = 2)[:10]
+# recovered_state = convert_strings_to_states(generated_string)
+# converted_string = convert_states_to_strings(recovered_state)
+# for string in generated_string: print(string)
+# print("\nRecovered states:")
+# for state in recovered_state: print(state)
+# print("\nConverted states to strings:", converted_string)

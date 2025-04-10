@@ -3,29 +3,9 @@ import time
 import orbital_logic_game_functions as olgf
 
 
-if __name__ == "__main__":
-    # board is a square grid
-    # 1 for 1st player and -1 for 2nd player
-    processable_symbols = [1, -1, 0]
-    transfer_directions = ["u", "d", "l", "r"]
-    rotate_directions = ["-", "+", "0"]
-    board_size = 4
-    state = np.zeros((board_size, board_size))
-    # state = np.array([[0, 0, 0], \
-    #                   [0, 1, 0], \
-    #                   [0, 0, 0]])
-    # state = np.array([[1, -1, -1, -1], \
-    #                   [0, 1, -1, -1], \
-    #                   [0, 1, 1, -1], \
-    #                   [1, 1, 0, -1]])
-   # olgf.print_game_statistics(board_size)
-
-
+def check_game_play_probabilities(board_size = 3, games_played = 100000, verbose_print = False):
     start_time = time.time()
     
-    verbose_print = False
-    games_played = 10000
-    board_size = 3
     olgf.print_game_statistics(board_size)
     counters = {"1_start_1_win": 0, "1_start_2_win": 0, "2_start_1_win": 0, "2_start_2_win": 0, "1_start_draw": 0, "2_start_draw": 0}
     start_player = 1
@@ -36,12 +16,12 @@ if __name__ == "__main__":
         state = np.zeros((board_size, board_size))
         start_player *= -1
         player = start_player
-        if verbose_print: print(f"\nGame {i+1}\n"); olgf.print_game_state(state, players, [1, "  ", ""]); print(2*"\n")
+        if verbose_print: print(f"\nGame {i+1}\n"); olgf.print_game_state(state, players_symbols, [1, "  ", ""]); print(2*"\n")
         for j in range(board_size ** 2):
             possible_moves = olgf.get_possible_moves(state, rotate_direction, transfer_allowed, player)
             next_move = np.random.choice(possible_moves)
             new_state = olgf.play_turn(state, next_move)
-            if verbose_print: print(next_move); olgf.print_game_state(new_state, players, [1, "  ", ""]); print(2*"\n")
+            if verbose_print: print(next_move); olgf.print_game_state(new_state, players_symbols, [1, "  ", ""]); print(2*"\n")
             player *= -1
             state = np.copy(new_state)
             if olgf.evaluate_game_state(state) == 1:
@@ -85,16 +65,36 @@ if __name__ == "__main__":
     print(f"\nTime taken: {time.time() - start_time:.2f} seconds")
 
 
-    # # Example usage:
-    # n = 4
-    # k = 1
-    # l = 1
+if __name__ == "__main__":
+    # board is a square grid
+    # 1 for 1st player and -1 for 2nd player
+    processable_symbols = [1, -1, 0]
+    transfer_directions = ["u", "d", "l", "r"]
+    rotate_directions = ["-", "+", "0"]
+    board_size = 3
+    players_symbols = {1: "x", -1: "o", 0: "_"}
+    state = np.zeros((board_size, board_size))
+    # state = np.array([[0, 0, 0], \
+    #                   [0, 1, 0], \
+    #                   [0, 0, 0]])
+    # state = np.array([[1, -1, -1, -1], \
+    #                   [0, 1, -1, -1], \
+    #                   [0, 1, 1, -1], \
+    #                   [1, 1, 0, -1]])
+    # olgf.print_game_statistics(board_size)
 
-    # all_strings = olgf.generate_states_strings(n, k, l)
-    # print(f"Total strings: {len(all_strings)}")
-    # # Print a few example strings:
-    # for s in all_strings[:]:
-    #     print(s)
+    check_game_play_probabilities(board_size, 10000, False)
+    
+    # Example usage:
+    n = 4
+    k = 1
+    l = 1
+
+    all_strings = olgf.generate_states_strings(players_symbols, n, k, l)
+    print(f"Total strings: {len(all_strings)}")
+    # Print a few example strings:
+    for s in all_strings[:]:
+        print((" ").join(list(s)))
 
 
 # Initial game state:
