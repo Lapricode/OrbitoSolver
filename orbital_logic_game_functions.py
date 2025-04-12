@@ -1,6 +1,6 @@
 import numpy as np
 import math as m
-from itertools import combinations
+import itertools
 
 
 # important global variables for the functions
@@ -180,9 +180,9 @@ def generate_state_strings(players_symbols = players_symbols_default, n = 4, k =
     if k + l > n: print("The sum of k and l must not exceed n."); return None
     positions = list(range(n))  # positions in the string
     all_strings = []  # list to store the generated strings
-    for x_positions in combinations(positions, k):  # choose k positions for one symbol in the string
+    for x_positions in itertools.combinations(positions, k):  # choose k positions for one symbol in the string
         remaining_positions = set(positions) - set(x_positions)  # remaining positions for the other symbols in the string
-        for o_positions in combinations(sorted(remaining_positions), l):  # choose l positions for the other symbol in the string
+        for o_positions in itertools.combinations(sorted(remaining_positions), l):  # choose l positions for the other symbol in the string
             s = [str(players_symbols[0])] * n  # initialize the string with default symbols
             for pos in x_positions:  # place the first symbol in the chosen related positions
                 s[pos] = str(players_symbols[1])
@@ -251,9 +251,54 @@ def stringify_states_numbers(state_numbers, state_length, numbers_base = "3", pl
         state_strings.append(str(state_numbers[k]).replace("0", players_symbols[0]).replace("1", players_symbols[1]).replace("2", players_symbols[2]).rjust(state_length, players_symbols[0]))
     return state_strings
 
-#
-def find_unique_states(state_strings, players_symbols = players_symbols_default):
-    pass
+# given the set of state strings, find the smallest subset of them that fully describes it, up to rotational transformations
+def find_unique_states_rotationally(state_strings, players_symbols = players_symbols_default):
+    '''
+    find the unique strings in the list state strings, up to all possible 90 degrees rotations 
+    return the unique state strings (sorted to their corresponding numbers), along to their numbers
+    '''
+    # state_strings_numbers = numberify_state_strings(state_strings, players_symbols)
+    # zipped_data = zip(state_strings, state_strings_numbers)
+    # sorted_pairs = sorted(zipped_data, key = lambda x: x[1])
+    # state_strings, state_strings_numbers = zip(*sorted_pairs)
+    # unique_state_strings = list(state_strings)
+    # counter = 0
+    # while counter < len(unique_state_strings):
+    #     state = unique_state_strings[counter]
+    #     rotated_states = [state]
+    #     for k in range(1, 4):
+    #         rotation = rotate_90_degrees(state, "cw", k)
+    #         if rotation not in rotated_states:
+    #             rotated_states.append(rotation)
+    #     rotated_states_numbers = numberify_state_strings(rotated_states, players_symbols)
+    #     zipped_data = zip(rotated_states, rotated_states_numbers)
+    #     sorted_pairs = sorted(zipped_data, key = lambda x: x[1])
+    #     try:
+    #         rotated_states, _ = zip(*sorted_pairs)
+    #         for string in rotated_states[1:]:
+    #             unique_state_strings.remove(string)
+    #     except: unique_state_strings, unique_state_numbers = [], []
+    #     counter += 1
+    # unique_state_numbers = numberify_state_strings(unique_state_strings, players_symbols)
+    unique_strings = []
+    unique_numbers = []
+    for k in range(len(state_strings)):
+        state = state_strings[k]
+        rotated_states = [state, rotate_90_degrees(state, "cw", 1), rotate_90_degrees(state, "cw", 2), rotate_90_degrees(state, "cw", 3)]
+        rotated_states_numbers = numberify_state_strings(rotated_states, players_symbols)
+        is_unique = True
+        for num in rotated_states_numbers:
+            if num in unique_numbers:
+                is_unique = False
+        if is_unique:
+            min_index = rotated_states_numbers.index(min(rotated_states_numbers))
+            unique_numbers.append(rotated_states_numbers[min_index])
+            unique_strings.append(rotated_states[min_index])
+    zipped_data = zip(unique_strings, unique_numbers)
+    sorted_pairs = sorted(zipped_data, key = lambda x: x[1])
+    try: unique_state_strings, unique_state_numbers = zip(*sorted_pairs)
+    except: unique_state_strings, unique_state_numbers = [], []
+    return list(unique_state_strings), list(unique_state_numbers)
 
 # print the game state
 def print_game_state(state, players_symbols = players_symbols_default, print_gap_info = [1, "  ", ""]):

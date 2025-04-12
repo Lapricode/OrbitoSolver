@@ -5,15 +5,11 @@ import itertools
 import orbital_logic_game_functions as olgf
 
 
-def check_game_play_probabilities(board_size = 3, games_played = 100000, verbose_print = False):
+def check_game_play_probabilities(board_size = 3, games_played = 10000, rotate_direction = "1", transfer_allowed = True, players_symbols = {1: "x", 2: "o", 0: "_"}, verbose_print = False):
     start_time = time.time()
-    
     olgf.print_game_statistics(board_size)
     counters = {"1_start_1_win": 0, "1_start_2_win": 0, "2_start_1_win": 0, "2_start_2_win": 0, "1_start_draw": 0, "2_start_draw": 0}
     start_player = 1
-    players_symbols = {1: "x", 2: "o", 0: "_"}
-    rotate_direction = "0"
-    transfer_allowed = True
     for i in range(games_played):
         state = np.zeros((board_size, board_size))
         start_player = 3 - start_player
@@ -70,10 +66,10 @@ def check_game_play_probabilities(board_size = 3, games_played = 100000, verbose
 if __name__ == "__main__":
     # board is a square grid
     # 1 for 1st player and 2 for 2nd player
-    transfer_directions = ["u", "d", "l", "r"]
-    rotate_directions = ["-", "+", "0"]
     board_size = 3
     players_symbols = {1: "x", 2: "o", 0: "_"}
+    rotate_direction = "1"
+    transfer_allowed = True
     state = np.zeros((board_size, board_size))
     # state = np.array([[0, 0, 0], \
     #                   [0, 1, 0], \
@@ -85,7 +81,7 @@ if __name__ == "__main__":
     # olgf.print_game_statistics(board_size)
 
     # # test 1:
-    # check_game_play_probabilities(board_size, 10000, False)
+    # check_game_play_probabilities(board_size, 10000, rotate_direction, transfer_allowed, players_symbols, True)
     
     # test 2:
     board_size = 2
@@ -95,61 +91,11 @@ if __name__ == "__main__":
         if abs(pair[0] - pair[1]) <= 1 and pair[0] + pair[1] <= board_size**2:
             all_strings += olgf.generate_state_strings(players_symbols, board_size**2, pair[0], pair[1])
     print(f"\nTotal strings:\t {len(all_strings)}")
-    all_strings_numbers = olgf.numberify_state_strings(all_strings)
-    zipped_data = zip(all_strings, all_strings_numbers)
-    sorted_pairs = sorted(zipped_data, key = lambda x: x[1])
-    all_strings, all_strings_numbers = zip(*sorted_pairs)
-    all_strings = list(all_strings)
-    unique_strings = copy.copy(all_strings)
-    counter = 0
-    while counter < len(unique_strings):
-        state = unique_strings[counter]
-        rotated_states = [state]
-        for k in range(1, 4):
-            rotation = olgf.rotate_90_degrees(state, "cw", k)
-            if rotation not in rotated_states:
-                rotated_states.append(rotation)
-        rotated_states_numbers = olgf.numberify_state_strings(rotated_states)
-        zipped_data = zip(rotated_states, rotated_states_numbers)
-        sorted_pairs = sorted(zipped_data, key = lambda x: x[1])
-        sorted_rotated_strings, sorted_rotated_numbers = zip(*sorted_pairs)
-        for string in sorted_rotated_strings[1:]:
-            unique_strings.remove(string)
-        # is_unique = True
-        # for num in rotated_states_numbers:
-        #     if num in unique_numbers:
-        #         is_unique = False
-        # if is_unique:
-        #     min_index = rotated_states_numbers.index(min(rotated_states_numbers))
-        #     unique_numbers.append(rotated_states_numbers[min_index])
-        #     unique_strings.append(rotated_states[min_index])
-        counter += 1
-    print(f"\nUnique strings:\t {len(unique_strings)}")
-    unique_strings_numbers = olgf.numberify_state_strings(unique_strings)
-    for k in range(len(unique_strings)):
-        print((" ").join(unique_strings[k]) + 2*"\t" + str(unique_strings_numbers[k]), end = "\n")
-    print(olgf.stringify_states_numbers(unique_strings_numbers, board_size**2, "10", players_symbols))
-    # unique_strings = []
-    # unique_numbers = []
-    # for k in range(len(all_strings)):
-    #     state = all_strings[k]
-    #     rotated_states = [state, olgf.rotate_90_degrees(state, "cw", 1), olgf.rotate_90_degrees(state, "cw", 2), olgf.rotate_90_degrees(state, "cw", 3)]
-    #     rotated_states_numbers = olgf.numberify_state_strings(rotated_states)
-    #     is_unique = True
-    #     for num in rotated_states_numbers:
-    #         if num in unique_numbers:
-    #             is_unique = False
-    #     if is_unique:
-    #         min_index = rotated_states_numbers.index(min(rotated_states_numbers))
-    #         unique_numbers.append(rotated_states_numbers[min_index])
-    #         unique_strings.append(rotated_states[min_index])
-    # zipped_data = zip(unique_strings, unique_numbers)
-    # sorted_pairs = sorted(zipped_data, key=lambda x: x[1])
-    # sorted_unique_strings, sorted_unique_numbers = zip(*sorted_pairs)
-    # print(f"\nUnique strings:\t {len(sorted_unique_strings)}")
-    # for k in range(len(sorted_unique_strings)):
-    #     print((" ").join(sorted_unique_strings[k]) + 2*"\t" + str(sorted_unique_numbers[k]), end = "\n")
-    # olgf.print_game_state(k, players_symbols)
+    unique_state_strings, unique_state_numbers = olgf.find_unique_states_rotationally(all_strings, players_symbols)
+    print(f"\nUnique strings:\t {len(unique_state_strings)}")
+    for k in range(len(unique_state_strings)):
+        print((" ").join(unique_state_strings[k]) + 2*"\t" + str(unique_state_numbers[k]), end = "\n")
+    print(olgf.stringify_states_numbers(unique_state_numbers, board_size**2, "10", players_symbols))
     
     # # test 3:
     # max = 0
