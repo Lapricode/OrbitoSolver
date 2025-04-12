@@ -11,7 +11,7 @@ def minimax(state, rotate_direction = "clockwise", transfer_allowed = True, play
         state: the current game state (a numpy array)
         rotate_direction: the direction in which the board is rotated (clockwise, counterclockwise, or still)
         transfer_allowed: whether transfers are allowed between adjacent cells
-        player: the player whose turn it is (1 or -1)
+        player: the player whose turn it is (1 or 2)
         maximizing_player: the player we are trying to maximize (the one for whom we want the best move)
         depth: current depth of recursion (used to favor faster wins/longer delays of losses)
         alpha: the best already explored option along the path to the maximizer
@@ -39,7 +39,7 @@ def minimax(state, rotate_direction = "clockwise", transfer_allowed = True, play
         max_eval = -math.inf
         for move in moves:
             new_state = olgf.play_turn(state, move)
-            eval = minimax(new_state, rotate_direction, transfer_allowed, -player, maximizing_player, depth + 1, alpha, beta)
+            eval = minimax(new_state, rotate_direction, transfer_allowed, 3 - player, maximizing_player, depth + 1, alpha, beta)
             max_eval = max(max_eval, eval)
             alpha = max(alpha, eval)
             if beta <= alpha:
@@ -49,7 +49,7 @@ def minimax(state, rotate_direction = "clockwise", transfer_allowed = True, play
         min_eval = math.inf
         for move in moves:
             new_state = olgf.play_turn(state, move)
-            eval = minimax(new_state, rotate_direction, transfer_allowed, -player, maximizing_player, depth + 1, alpha, beta)
+            eval = minimax(new_state, rotate_direction, transfer_allowed, 3 - player, maximizing_player, depth + 1, alpha, beta)
             min_eval = min(min_eval, eval)
             beta = min(beta, eval)
             if beta <= alpha:
@@ -61,7 +61,7 @@ def find_best_move(state, rotate_direction = "clockwise", transfer_allowed = Tru
     Determines the best move for the given player from the current state.
     Parameters:
         state: the current game state (a numpy array)
-        player: the player whose move is to be determined (1 or -1)
+        player: the player whose move is to be determined (1 or 2)
     Returns:
         A tuple (best_move, best_value) where best_move is the move (a dictionary)
         and best_value is its minimax evaluation.
@@ -72,7 +72,7 @@ def find_best_move(state, rotate_direction = "clockwise", transfer_allowed = Tru
 
     for move in moves:
         new_state = olgf.play_turn(state, move)
-        move_value = minimax(new_state, rotate_direction, transfer_allowed, -player, player, depth = 1, alpha = -math.inf, beta = math.inf)
+        move_value = minimax(new_state, rotate_direction, transfer_allowed, 3 - player, player, depth = 1, alpha = -math.inf, beta = math.inf)
         if move_value > best_value:
             best_value = move_value
             best_move = move
@@ -83,7 +83,7 @@ def simulate_principal_variation(state, rotate_direction = "clockwise", player =
     Simulate a possible evolution of the game (the principal variation) by alternately choosing best moves.
     Parameters:
         state: the starting game state (a numpy array)
-        player: the player whose turn it is (1 or -1)
+        player: the player whose turn it is (1 or 2)
         max_steps: maximum number of moves to simulate to avoid infinite loops
     Returns:
         A list of game states representing the evolution from the current state.
@@ -104,23 +104,23 @@ def simulate_principal_variation(state, rotate_direction = "clockwise", player =
         steps += 1
     return evolution
 
-def estimated_game_result(score, players_symbols = {1: "x", -1: "o", 0: "_"}, start_player = 1, maximizing_player = None):
+def estimated_game_result(score, players_symbols = {1: "x", 2: "o", 0: "_"}, start_player = 1, maximizing_player = None):
     """
     Returns a message describing the estimated result of the game based on the minimax score.
     Parameters:
         score: the minimax evaluation score
-        players_symbols: a dictionary mapping player values to symbols (default: {1: "x", -1: "o"})
-        start_player: the player who started the game (1 or -1)
-        maximizing_player: the player for whom we are optimizing (1 or -1)
+        players_symbols: a dictionary mapping player values to symbols (default: {1: "x", 2: "o",  0: "_"})
+        start_player: the player who started the game (1 or 1)
+        maximizing_player: the player for whom we are optimizing (1 or 2)
     Returns:
         A message describing the estimated result of the game.
     """
     if maximizing_player is None:
         maximizing_player = start_player
     if score > 0:
-        return f"Player {players_symbols[[-maximizing_player, maximizing_player][start_player == maximizing_player]]} wins!"
+        return f"Player {players_symbols[[3 - maximizing_player, maximizing_player][start_player == maximizing_player]]} wins!"
     elif score < 0:
-        return f"Player {players_symbols[[maximizing_player, -maximizing_player][start_player == maximizing_player]]} wins!"
+        return f"Player {players_symbols[[maximizing_player, 3 - maximizing_player][start_player == maximizing_player]]} wins!"
     elif score == 0:
         return "It's a draw!"
 
@@ -135,7 +135,7 @@ def solve_game(state, rotate_direction = "clockwise", transfer_allowed = True, p
         state: the current game state (a numpy array)
         rotate_direction: the direction in which the board is rotated (clockwise, counterclockwise, or still)
         transfer_allowed: whether transfers are allowed between adjacent cells
-        player: the player whose turn it is (1 or -1)
+        player: the player whose turn it is (1 or 2)
         maximizing_player: the player for whom we are optimizing (defaults to the initial player)
         depth: current recursion depth (used to favor faster wins/longer losses)
         alpha: best value found so far for the maximizer
@@ -168,7 +168,7 @@ def solve_game(state, rotate_direction = "clockwise", transfer_allowed = True, p
         best_moves_seq = None
         for move in moves:
             new_state = olgf.play_turn(state, move)
-            child = solve_game(new_state, rotate_direction, transfer_allowed, -player, maximizing_player, depth + 1, alpha, beta)
+            child = solve_game(new_state, rotate_direction, transfer_allowed, 3 - player, maximizing_player, depth + 1, alpha, beta)
             child_eval = child["score"]
             if child_eval > best_eval:
                 best_eval = child_eval
@@ -186,7 +186,7 @@ def solve_game(state, rotate_direction = "clockwise", transfer_allowed = True, p
         best_moves_seq = None
         for move in moves:
             new_state = olgf.play_turn(state, move)
-            child = solve_game(new_state, rotate_direction, transfer_allowed, -player, maximizing_player, depth + 1, alpha, beta)
+            child = solve_game(new_state, rotate_direction, transfer_allowed, 3 - player, maximizing_player, depth + 1, alpha, beta)
             child_eval = child["score"]
             if child_eval < best_eval:
                 best_eval = child_eval
@@ -200,24 +200,25 @@ def solve_game(state, rotate_direction = "clockwise", transfer_allowed = True, p
 
 if __name__ == "__main__":
     print("Welcome to the \"Orbital Logic Game\" solver!")
-    initial_state = np.array([[0, 0, 0], \
-                                [0, 0, 0], \
-                                [0, 0, 0]])
-    # initial_state = np.array([[1, -1, 0, 1], \
-    #                             [0, 0, -1, 0], \
-    #                             [0, 0, 0, 1], \
-    #                             [-1, 0, 0, 0]])
+    # initial_state = np.zeros((2, 2))
+    # initial_state = np.array([[0, 0, 0], \
+    #                             [0, 0, 0], \
+    #                             [0, 0, 0]])
+    initial_state = np.array([[1, 2, 0, 1], \
+                                [0, 0, 2, 0], \
+                                [0, 0, 0, 1], \
+                                [2, 0, 0, 0]])
     # initial_state = np.zeros((4, 4))
     board_size = initial_state.shape[0]
-    players_symbols = {1: "x", -1: "o", 0: "_"}
+    players_symbols = {1: "x", 2: "o", 0: "_"}
     start_player = 1
-    rotate_direction = "+"
+    rotate_direction = "ccw"
     transfer_allowed = True
     
     olgf.print_game_statistics(board_size)
     print("\nGame rules:")
     print(f"  - Board size:          {board_size}x{board_size}")
-    print(f"  - Players:             {players_symbols[1]} and {players_symbols[-1]}")
+    print(f"  - Players:             {players_symbols[1]} and {players_symbols[2]}")
     print(f"  - Rotation direction:  {rotate_direction}")
     print(f"  - Transfers allowed:   {transfer_allowed}")
     print("\n\nInitial game state:\n")
@@ -250,8 +251,8 @@ if __name__ == "__main__":
         print(f"State after move {move_number}:")
         olgf.print_game_state(s, players_symbols)
         if move_number < len(perfect_moves_seq):
-            print(f"\n\nMove {move_number + 1} ({players_symbols[start_player]}) : {perfect_moves_seq[move_number]}")
-            player *= -1
+            print(f"\n\nMove {move_number + 1} ({players_symbols[player]}) : {perfect_moves_seq[move_number]}")
+            player = 3 - player
     print("\n")
 
     # # Simulate and print a possible evolution of the game.

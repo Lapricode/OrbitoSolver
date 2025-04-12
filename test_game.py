@@ -1,5 +1,6 @@
 import numpy as np
 import time
+import copy
 import itertools
 import orbital_logic_game_functions as olgf
 
@@ -10,12 +11,12 @@ def check_game_play_probabilities(board_size = 3, games_played = 100000, verbose
     olgf.print_game_statistics(board_size)
     counters = {"1_start_1_win": 0, "1_start_2_win": 0, "2_start_1_win": 0, "2_start_2_win": 0, "1_start_draw": 0, "2_start_draw": 0}
     start_player = 1
-    players_symbols = {1: "x", -1: "o", 0: "_"}
+    players_symbols = {1: "x", 2: "o", 0: "_"}
     rotate_direction = "0"
     transfer_allowed = True
     for i in range(games_played):
         state = np.zeros((board_size, board_size))
-        start_player *= -1
+        start_player = 3 - start_player
         player = start_player
         if verbose_print: print(f"\nGame {i+1}\n"); olgf.print_game_state(state, players_symbols, [1, "  ", ""]); print(2*"\n")
         for j in range(board_size ** 2):
@@ -23,26 +24,26 @@ def check_game_play_probabilities(board_size = 3, games_played = 100000, verbose
             next_move = np.random.choice(possible_moves)
             new_state = olgf.play_turn(state, next_move)
             if verbose_print: print(next_move); olgf.print_game_state(new_state, players_symbols, [1, "  ", ""]); print(2*"\n")
-            player *= -1
+            player = 3 - player
             state = np.copy(new_state)
             if olgf.evaluate_game_state(state) == 1:
                 if start_player == 1:
                     counters["1_start_1_win"] += 1
-                elif start_player == -1:
+                elif start_player == 2:
                     counters["2_start_1_win"] += 1
                 if verbose_print: print(f"Player 1 wins\n")
                 break
-            if olgf.evaluate_game_state(state) == -1:
+            if olgf.evaluate_game_state(state) == 2:
                 if start_player == 1:
                     counters["1_start_2_win"] += 1
-                elif start_player == -1:
+                elif start_player == 2:
                     counters["2_start_2_win"] += 1
                 if verbose_print: print(f"Player 2 wins\n")
                 break
             if j == board_size ** 2 - 1:
                 if start_player == 1:
                     counters["1_start_draw"] += 1
-                elif start_player == -1:
+                elif start_player == 2:
                     counters["2_start_draw"] += 1
                 if verbose_print: print("It's a draw\n")
                 break
@@ -68,56 +69,97 @@ def check_game_play_probabilities(board_size = 3, games_played = 100000, verbose
 
 if __name__ == "__main__":
     # board is a square grid
-    # 1 for 1st player and -1 for 2nd player
-    processable_symbols = [1, -1, 0]
+    # 1 for 1st player and 2 for 2nd player
     transfer_directions = ["u", "d", "l", "r"]
     rotate_directions = ["-", "+", "0"]
     board_size = 3
-    players_symbols = {1: "x", -1: "o", 0: "_"}
+    players_symbols = {1: "x", 2: "o", 0: "_"}
     state = np.zeros((board_size, board_size))
     # state = np.array([[0, 0, 0], \
     #                   [0, 1, 0], \
     #                   [0, 0, 0]])
-    # state = np.array([[1, -1, -1, -1], \
-    #                   [0, 1, -1, -1], \
-    #                   [0, 1, 1, -1], \
-    #                   [1, 1, 0, -1]])
+    # state = np.array([[1, 2, 2, 2], \
+    #                   [0, 1, 2, 2], \
+    #                   [0, 1, 1, 2], \
+    #                   [1, 1, 0, 2]])
     # olgf.print_game_statistics(board_size)
 
-    # test 1:
+    # # test 1:
     # check_game_play_probabilities(board_size, 10000, False)
     
     # test 2:
-    board_size = 3
+    board_size = 2
     olgf.print_game_statistics(board_size)
     all_strings = []
     for pair in itertools.product(list(range(board_size**2)), repeat = 2):
         if abs(pair[0] - pair[1]) <= 1 and pair[0] + pair[1] <= board_size**2:
             all_strings += olgf.generate_state_strings(players_symbols, board_size**2, pair[0], pair[1])
-    print(f"Total strings: {len(all_strings)}")
-    # for s in all_strings[:]:
-    #     print((" ").join(list(s)))
+    print(f"\nTotal strings:\t {len(all_strings)}")
+    all_strings_numbers = olgf.numberify_state_strings(all_strings)
+    zipped_data = zip(all_strings, all_strings_numbers)
+    sorted_pairs = sorted(zipped_data, key = lambda x: x[1])
+    all_strings, all_strings_numbers = zip(*sorted_pairs)
+    all_strings = list(all_strings)
+    unique_strings = copy.copy(all_strings)
+    counter = 0
+    while counter < len(unique_strings):
+        state = unique_strings[counter]
+        rotated_states = [state]
+        for k in range(1, 4):
+            rotation = olgf.rotate_90_degrees(state, "cw", k)
+            if rotation not in rotated_states:
+                rotated_states.append(rotation)
+        rotated_states_numbers = olgf.numberify_state_strings(rotated_states)
+        zipped_data = zip(rotated_states, rotated_states_numbers)
+        sorted_pairs = sorted(zipped_data, key = lambda x: x[1])
+        sorted_rotated_strings, sorted_rotated_numbers = zip(*sorted_pairs)
+        for string in sorted_rotated_strings[1:]:
+            unique_strings.remove(string)
+        # is_unique = True
+        # for num in rotated_states_numbers:
+        #     if num in unique_numbers:
+        #         is_unique = False
+        # if is_unique:
+        #     min_index = rotated_states_numbers.index(min(rotated_states_numbers))
+        #     unique_numbers.append(rotated_states_numbers[min_index])
+        #     unique_strings.append(rotated_states[min_index])
+        counter += 1
+    print(f"\nUnique strings:\t {len(unique_strings)}")
+    unique_strings_numbers = olgf.numberify_state_strings(unique_strings)
+    for k in range(len(unique_strings)):
+        print((" ").join(unique_strings[k]) + 2*"\t" + str(unique_strings_numbers[k]), end = "\n")
+    print(olgf.stringify_states_numbers(unique_strings_numbers, board_size**2, "10", players_symbols))
+    # unique_strings = []
+    # unique_numbers = []
+    # for k in range(len(all_strings)):
+    #     state = all_strings[k]
+    #     rotated_states = [state, olgf.rotate_90_degrees(state, "cw", 1), olgf.rotate_90_degrees(state, "cw", 2), olgf.rotate_90_degrees(state, "cw", 3)]
+    #     rotated_states_numbers = olgf.numberify_state_strings(rotated_states)
+    #     is_unique = True
+    #     for num in rotated_states_numbers:
+    #         if num in unique_numbers:
+    #             is_unique = False
+    #     if is_unique:
+    #         min_index = rotated_states_numbers.index(min(rotated_states_numbers))
+    #         unique_numbers.append(rotated_states_numbers[min_index])
+    #         unique_strings.append(rotated_states[min_index])
+    # zipped_data = zip(unique_strings, unique_numbers)
+    # sorted_pairs = sorted(zipped_data, key=lambda x: x[1])
+    # sorted_unique_strings, sorted_unique_numbers = zip(*sorted_pairs)
+    # print(f"\nUnique strings:\t {len(sorted_unique_strings)}")
+    # for k in range(len(sorted_unique_strings)):
+    #     print((" ").join(sorted_unique_strings[k]) + 2*"\t" + str(sorted_unique_numbers[k]), end = "\n")
+    # olgf.print_game_state(k, players_symbols)
     
-    # test 3:
+    # # test 3:
     # max = 0
     # s_max = ""
     # for s in all_strings:
-    #     s2 = s.replace(players_symbols[0], "0").replace(players_symbols[1], "1").replace(players_symbols[-1], "2")
+    #     s2 = s.replace(players_symbols[0], "0").replace(players_symbols[1], "1").replace(players_symbols[2], "2")
     #     if int(s2, 3) > max:
     #         max = int(s2, 3)
     #         s_max = s
     # print(max, s_max)
-
-    # test 4:
-    state = "x_x_ooxxo"
-    state_strings = [state, olgf.rotate_90_degrees(state, "cw", 1), olgf.rotate_90_degrees(state, "cw", 2), olgf.rotate_90_degrees(state, "cw", 3), \
-                            olgf.rotate_90_degrees(state, "ccw", 1), olgf.rotate_90_degrees(state, "ccw", 2), olgf.rotate_90_degrees(state, "ccw", 3)]
-    states = olgf.convert_strings_to_states(state_strings, players_symbols)
-    for k in states:
-        print("\n\n")
-        olgf.print_game_state(k, players_symbols)
-    print("\n\n")
-    print(olgf.number_state_strings(state_strings, players_symbols))
 
 
 # Initial game state:
@@ -159,7 +201,7 @@ if __name__ == "__main__":
       
 # _  _  _  x  
 
-# Move 2: {'player': -1, 'transfer': None, 'add': (3, 0), 'rotate': '-1'}
+# Move 2: {'player': 2, 'transfer': None, 'add': (3, 0), 'rotate': '-1'}
 # State after move 2:
 # x  x  x  o  
       
@@ -179,7 +221,7 @@ if __name__ == "__main__":
       
 # _  x  o  x  
 
-# Move 4: {'player': -1, 'transfer': [(1, 2), 'l'], 'add': (1, 2), 'rotate': '-1'}
+# Move 4: {'player': 2, 'transfer': [(1, 2), 'l'], 'add': (1, 2), 'rotate': '-1'}
 # State after move 4:
 # o  o  x  x  
       
@@ -237,7 +279,7 @@ if __name__ == "__main__":
       
 # _  _  _  _  
 
-# Move 2: {'player': -1, 'transfer': None, 'add': (0, 1), 'rotate': '0'}
+# Move 2: {'player': 2, 'transfer': None, 'add': (0, 1), 'rotate': '0'}
 # State after move 2:
 # x  o  _  _  
       
@@ -257,7 +299,7 @@ if __name__ == "__main__":
       
 # _  _  _  _  
 
-# Move 4: {'player': -1, 'transfer': None, 'add': (0, 3), 'rotate': '0'}
+# Move 4: {'player': 2, 'transfer': None, 'add': (0, 3), 'rotate': '0'}
 # State after move 4:
 # x  o  x  o  
       
@@ -277,7 +319,7 @@ if __name__ == "__main__":
       
 # _  _  _  _  
 
-# Move 6: {'player': -1, 'transfer': None, 'add': (1, 1), 'rotate': '0'}
+# Move 6: {'player': 2, 'transfer': None, 'add': (1, 1), 'rotate': '0'}
 # State after move 6:
 # x  o  x  o  
       
@@ -297,7 +339,7 @@ if __name__ == "__main__":
       
 # _  _  _  _  
 
-# Move 8: {'player': -1, 'transfer': None, 'add': (1, 3), 'rotate': '0'}
+# Move 8: {'player': 2, 'transfer': None, 'add': (1, 3), 'rotate': '0'}
 # State after move 8:
 # x  o  x  o  
       
@@ -317,7 +359,7 @@ if __name__ == "__main__":
       
 # _  _  _  _  
 
-# Move 10: {'player': -1, 'transfer': None, 'add': (3, 0), 'rotate': '0'}
+# Move 10: {'player': 2, 'transfer': None, 'add': (3, 0), 'rotate': '0'}
 # State after move 10:
 # x  o  x  o  
       
@@ -337,7 +379,7 @@ if __name__ == "__main__":
       
 # o  _  _  _  
 
-# Move 12: {'player': -1, 'transfer': None, 'add': (2, 2), 'rotate': '0'}
+# Move 12: {'player': 2, 'transfer': None, 'add': (2, 2), 'rotate': '0'}
 # State after move 12:
 # x  o  x  o  
       
@@ -357,7 +399,7 @@ if __name__ == "__main__":
       
 # o  _  _  _  
 
-# Move 14: {'player': -1, 'transfer': None, 'add': (3, 1), 'rotate': '0'}
+# Move 14: {'player': 2, 'transfer': None, 'add': (3, 1), 'rotate': '0'}
 # State after move 14:
 # x  o  x  o  
       
@@ -377,7 +419,7 @@ if __name__ == "__main__":
       
 # o  o  x  _  
 
-# Move 16: {'player': -1, 'transfer': None, 'add': (3, 3), 'rotate': '0'}
+# Move 16: {'player': 2, 'transfer': None, 'add': (3, 3), 'rotate': '0'}
 # State after move 16:
 # x  o  x  o  
       
@@ -434,7 +476,7 @@ if __name__ == "__main__":
       
 # _  _  _  _  
 
-# Move 2 (o) : {'player': -1, 'transfer': None, 'add': (0, 0), 'rotate': '+'}
+# Move 2 (o) : {'player': 2, 'transfer': None, 'add': (0, 0), 'rotate': '+'}
 # State after move 2:
 # _  _  _  _  
       
@@ -454,7 +496,7 @@ if __name__ == "__main__":
       
 # _  _  _  _  
 
-# Move 4 (o) : {'player': -1, 'transfer': None, 'add': (2, 1), 'rotate': '+'}
+# Move 4 (o) : {'player': 2, 'transfer': None, 'add': (2, 1), 'rotate': '+'}
 # State after move 4:
 # _  _  _  _  
       
@@ -474,7 +516,7 @@ if __name__ == "__main__":
       
 # x  o  _  _  
 
-# Move 6 (o) : {'player': -1, 'transfer': None, 'add': (1, 3), 'rotate': '+'}
+# Move 6 (o) : {'player': 2, 'transfer': None, 'add': (1, 3), 'rotate': '+'}
 # State after move 6:
 # _  _  _  o  
       
@@ -494,7 +536,7 @@ if __name__ == "__main__":
       
 # _  _  x  o  
 
-# Move 8 (o) : {'player': -1, 'transfer': None, 'add': (0, 3), 'rotate': '+'}
+# Move 8 (o) : {'player': 2, 'transfer': None, 'add': (0, 3), 'rotate': '+'}
 # State after move 8:
 # _  o  o  _  
       
@@ -514,7 +556,7 @@ if __name__ == "__main__":
       
 # _  x  _  _  
 
-# Move 10 (o) : {'player': -1, 'transfer': None, 'add': (2, 2), 'rotate': '+'}
+# Move 10 (o) : {'player': 2, 'transfer': None, 'add': (2, 2), 'rotate': '+'}
 # State after move 10:
 # o  x  _  o  
       
@@ -534,7 +576,7 @@ if __name__ == "__main__":
       
 # _  _  _  x  
 
-# Move 12 (o) : {'player': -1, 'transfer': None, 'add': (0, 1), 'rotate': '+'}
+# Move 12 (o) : {'player': 2, 'transfer': None, 'add': (0, 1), 'rotate': '+'}
 # State after move 12:
 # o  o  x  _  
       

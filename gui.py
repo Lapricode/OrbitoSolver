@@ -173,7 +173,7 @@ def draw_board(screen, board_state, board_rect, hover_cell, selections, font):
             radius = min(cell_width, cell_height) // 3
             if board_state[i, j] == 1:
                 pygame.draw.circle(screen, (0, 0, 0), center, radius)
-            elif board_state[i, j] == -1:
+            elif board_state[i, j] == 2:
                 pygame.draw.circle(screen, (255, 255, 255), center, radius)
 
 # ---------------------
@@ -205,7 +205,7 @@ def main():
 
     # Game variables (set when game starts).
     board_state = None
-    current_player = 1  # 1 = Black, -1 = White
+    current_player = 1  # 1 = Black, 2 = White
     current_move = {"transfer": {"source": None, "target": None}, "add": None}
     move_phase = "none"  # "none", "transfer_target", "add_move"
     selections = {"transfer_source": None, "transfer_target": None, "add": None}
@@ -360,10 +360,10 @@ def main():
                         game_message = "It's a draw!"
                     elif result == 1:
                         game_message = "Black wins!"
-                    elif result == -1:
+                    elif result == 2:
                         game_message = "White wins!"
                 else:
-                    current_player *= -1
+                    current_player = 3 - current_player
                 reset_turn()
     complete_move_button.callback = complete_move
 
@@ -451,7 +451,7 @@ def main():
                         col = (event.pos[0] - board_rect.x) // cell_w
                         row = (event.pos[1] - board_rect.y) // cell_h
                         if (game_mode_choice == "2 Players") or (game_mode_choice == "Vs Computer" and current_player == 1):
-                            if transfer_allowed and move_phase == "none" and board_state[row, col] == -current_player:
+                            if transfer_allowed and move_phase == "none" and board_state[row, col] == 3 - current_player:
                                 current_move["transfer"]["source"] = (row, col)
                                 selections["transfer_source"] = (row, col)
                                 move_phase = "transfer_target"
@@ -476,7 +476,7 @@ def main():
                 restart_button.handle_event(event)
                 new_game_button.handle_event(event)
 
-        if mode_state == "playing" and not game_over and game_mode_choice == "Vs Computer" and current_player == -1:
+        if mode_state == "playing" and not game_over and game_mode_choice == "Vs Computer" and current_player == 2:
             best_move, score = find_best_move(board_state, rotate_direction, transfer_allowed, current_player)
             if best_move is not None:
                 board_state = play_turn(board_state, best_move)
@@ -489,10 +489,10 @@ def main():
                         game_message = "It's a draw!"
                     elif result == 1:
                         game_message = "Black wins!"
-                    elif result == -1:
+                    elif result == 2:
                         game_message = "White wins!"
                 else:
-                    current_player *= -1
+                    current_player = 3 - current_player
                 reset_turn()
                 pygame.time.delay(300)
 
