@@ -84,18 +84,24 @@ if __name__ == "__main__":
     # check_game_play_probabilities(board_size, 10000, rotate_direction, transfer_allowed, players_symbols, True)
     
     # test 2:
-    board_size = 2
+    board_size = 4
     olgf.print_game_statistics(board_size)
-    all_strings = []
-    for pair in itertools.product(list(range(board_size**2)), repeat = 2):
-        if abs(pair[0] - pair[1]) <= 1 and pair[0] + pair[1] <= board_size**2:
-            all_strings += olgf.generate_state_strings(players_symbols, board_size**2, pair[0], pair[1])
-    print(f"\nTotal strings:\t {len(all_strings)}")
-    unique_state_strings, unique_state_numbers = olgf.find_unique_states_rotationally(all_strings, players_symbols)
-    print(f"\nUnique strings:\t {len(unique_state_strings)}")
-    for k in range(len(unique_state_strings)):
-        print((" ").join(unique_state_strings[k]) + 2*"\t" + str(unique_state_numbers[k]), end = "\n")
-    print(olgf.stringify_states_numbers(unique_state_numbers, board_size**2, "10", players_symbols))
+    # all_strings = []
+    # for pair in itertools.product(list(range(board_size**2)), repeat = 2):
+    #     if abs(pair[0] - pair[1]) <= 1 and pair[0] + pair[1] <= board_size**2:
+    #         all_strings += olgf.generate_state_strings(players_symbols, board_size**2, pair[0], pair[1])
+    # print(f"\nTotal strings:\t {len(all_strings)}")
+    # all_strings, all_strings_numbers = olgf.sort_state_strings(all_strings, players_symbols)
+    # unique_state_strings, unique_state_numbers = olgf.find_unique_rotationally_symmetric_states(all_strings, players_symbols)
+    # print(f"\nUnique strings:\t {len(unique_state_strings)}")
+    # for k in range(len(all_strings)):
+    #     print((" ").join(all_strings[k]) + 2*"\t" + str(all_strings_numbers[k]), end = "\n")
+    # for k in range(len(unique_state_strings)):
+    #     print((" ").join(unique_state_strings[k]) + 2*"\t" + str(unique_state_numbers[k]), end = "\n")
+    # states = olgf.convert_strings_to_states(unique_state_strings, players_symbols)
+    # for state in states:
+    #     olgf.print_game_state(state, players_symbols); print("\n\n")
+    # print(olgf.stringify_states_numbers(unique_state_numbers, board_size**2, "10", players_symbols))
     
     # # test 3:
     # max = 0

@@ -220,6 +220,7 @@ def convert_strings_to_states(strings, players_symbols = players_symbols_default
 def numberify_state_strings(state_strings, players_symbols = players_symbols_default):
     '''
     numberify game states for easier and overall better identification, using the base-3 arithmetic system
+    state_strings are the strings representations of states
     players_symbols is a dictionary mapping player symbols to values (for example: {1: "x", 2: "o", 0: "_"})
     '''
     values = []
@@ -232,6 +233,7 @@ def numberify_state_strings(state_strings, players_symbols = players_symbols_def
 def stringify_states_numbers(state_numbers, state_length, numbers_base = "3", players_symbols = players_symbols_default):
     '''
     stringify game states for easier and overall better identification, using the base-3 arithmetic system
+    state_numbers are the numbers representations of states
     numbers_base is the arithmetic base of the numbers in the state_numbers list, it can be "3" (base 3) or "10" (base 10)
     players_symbols is a dictionary mapping player symbols to values (for example: {1: "x", 2: "o", 0: "_"})
     '''
@@ -251,8 +253,23 @@ def stringify_states_numbers(state_numbers, state_length, numbers_base = "3", pl
         state_strings.append(str(state_numbers[k]).replace("0", players_symbols[0]).replace("1", players_symbols[1]).replace("2", players_symbols[2]).rjust(state_length, players_symbols[0]))
     return state_strings
 
+# sort the given state strings based on their corresponding numbers
+def sort_state_strings(state_strings, players_symbols = players_symbols_default):
+    '''
+    state_strings are the strings representations of states
+    players_symbols is a dictionary mapping player symbols to values (for example: {1: "x", 2: "o", 0: "_"})
+    '''
+    state_numbers = numberify_state_strings(state_strings, players_symbols) 
+    zipped_data = zip(state_strings, state_numbers)
+    sorted_pairs = sorted(zipped_data, key = lambda x: x[1])
+    try:
+        sorted_strings, sorted_numbers = zip(*sorted_pairs)
+    except:
+        sorted_strings, sorted_numbers = [], []
+    return list(sorted_strings), list(sorted_numbers)
+
 # given the set of state strings, find the smallest subset of them that fully describes it, up to rotational transformations
-def find_unique_states_rotationally(state_strings, players_symbols = players_symbols_default):
+def find_unique_rotationally_symmetric_states(state_strings, players_symbols = players_symbols_default):
     '''
     find the unique strings in the list state strings, up to all possible 90 degrees rotations 
     return the unique state strings (sorted to their corresponding numbers), along to their numbers
@@ -296,8 +313,10 @@ def find_unique_states_rotationally(state_strings, players_symbols = players_sym
             unique_strings.append(rotated_states[min_index])
     zipped_data = zip(unique_strings, unique_numbers)
     sorted_pairs = sorted(zipped_data, key = lambda x: x[1])
-    try: unique_state_strings, unique_state_numbers = zip(*sorted_pairs)
-    except: unique_state_strings, unique_state_numbers = [], []
+    try:
+        unique_state_strings, unique_state_numbers = zip(*sorted_pairs)
+    except:
+        unique_state_strings, unique_state_numbers = [], []
     return list(unique_state_strings), list(unique_state_numbers)
 
 # print the game state
@@ -342,19 +361,37 @@ def print_game_statistics(board_size):
     print some game statistics
     '''
     board_cells = board_size ** 2
-    possible_board_states = 1  # the case of a blank grid
-    # calculate the number of possible board states starting with the same player (else it is double that number)
-    # not accounting for rotational symmetries
+    # all possible states, not accounting for rotational (90 degrees step) symmetries
+    N_all_symmetries = 1  # the case of a blank grid
     for k in range(1, board_cells + 1):
-        # print(multinomial(board_cells, int(np.floor(k / 2)), int(np.ceil(k / 2))))
-        possible_board_states += 2**(k%2) * multinomial(board_cells, int(np.floor(k / 2)), int(np.ceil(k / 2)))
-    # accounting for rotational symmetries
+        N_all_symmetries += 2**(k%2) * multinomial(board_cells, int(np.floor(k / 2)), int(np.ceil(k / 2)))
+    # accounting for rotational (90 degrees step) symmetries
+    # - at least single (180 degrees step) 2-way symmetry
+    N_2 = 0
+    cells_fill_2 = int(np.floor(board_size**2 / 2))
+    color_lim_2 = int(np.floor(board_size**2 / 4))
+    for w in range(0, color_lim_2 + 1):
+        for b in range(w, min(w + board_size % 2, color_lim_2) + 1):
+            N_2 += multinomial(cells_fill_2, w, b) * (3 - int(np.sign(abs(w - b))))**(board_size % 2)
+    # - only double (90 degrees step) 4-way symmetry
+    N_4 = 0
+    cells_fill_4 = int(np.floor(board_size**2 / 4))
+    color_lim_4 = int(np.floor(board_size**2 / 8))
+    for k in range(0, color_lim_4 + 1):
+        N_4 += multinomial(cells_fill_4, k, k) * 3**(board_size % 2)
+    # - all possible states accounting for every rotational symmetry
+    N_all_unique = int((N_all_symmetries - N_2) / 4 + (N_2 + N_4) / 2)
     
     print("\n--- Game statistics ---")
-    print("# board dimension (board size):     " + f"{board_size}")
-    print("# of total board cells:             " + f"{board_cells}")
-    print("# of possible board states:         " + f"{possible_board_states}" + "\t(including the blank grid case)")
-    print("# of possible states wrt 1 player:  " + f"{int((possible_board_states - 1) / 2)}" + "\t(excluding the blank grid case)")
+    print("# board dimension (board size):                                  " + f"{board_size}")
+    print("# of total board cells:                                          " + f"{board_cells}")
+    print("# of possible board states (including the blank grid case):")
+    # print(" - wrt 1 player:                                                 " + f"{int((N_all_symmetries - 1) / 2) + 1}")
+    print("    - with rotationally symmetric cases:                         " + f"{N_all_symmetries}")
+    print("    - unique / no rotationally symmetric cases:                  " + f"{N_all_unique}")
+    print("         - assymetric:                                           " + f"{int((N_all_symmetries - N_2) / 4)}")
+    print("         - 2-way symmetry (180 degrees step):                    " + f"{int((N_2 - N_4) / 2)}")
+    print("         - 4-way symmetry (90 degrees step):                     " + f"{N_4}")
 
 
 # generated_string = generate_states_strings(players_symbols = {1: "x", 2: "o", 0: "_"}, n = 9, k = 3, l = 2)[:10]
