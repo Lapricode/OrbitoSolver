@@ -1,4 +1,5 @@
 import numpy as np
+import random
 import time
 import copy
 import itertools
@@ -17,19 +18,20 @@ def check_game_play_probabilities(board_size = 3, games_played = 10000, rotate_d
         if verbose_print: print(f"\nGame {i+1}\n"); olgf.print_game_state(state, players_symbols, [1, "  ", ""]); print(2*"\n")
         for j in range(board_size ** 2):
             possible_moves = olgf.get_possible_moves(state, rotate_direction, transfer_allowed, player)
-            next_move = np.random.choice(possible_moves)
+            next_move = random.choice(possible_moves)
             new_state = olgf.play_turn(state, next_move)
             if verbose_print: print(next_move); olgf.print_game_state(new_state, players_symbols, [1, "  ", ""]); print(2*"\n")
             player = 3 - player
-            state = np.copy(new_state)
-            if olgf.evaluate_game_state(state) == 1:
+            state = new_state
+            result = olgf.evaluate_game_state(state)
+            if result == 1:
                 if start_player == 1:
                     counters["1_start_1_win"] += 1
                 elif start_player == 2:
                     counters["2_start_1_win"] += 1
                 if verbose_print: print(f"Player 1 wins\n")
                 break
-            if olgf.evaluate_game_state(state) == 2:
+            if result == 2:
                 if start_player == 1:
                     counters["1_start_2_win"] += 1
                 elif start_player == 2:

@@ -1,6 +1,7 @@
 import numpy as np
 import math as m
 import itertools
+import sys
 
 
 # important global variables for the functions
@@ -9,54 +10,129 @@ counterclockwise_rotation_keywords = ["counterclockwise", "ccw", "+", "1"]
 stand_still_keywords = ["still", "s", "x", "0"]
 players_symbols_default = {1: "x", 2: "o", 0: "_"}
 
+# caches used by the optimized rotation / encoding helpers
+_rotation_perms = {}     # (n, is_clockwise) -> numpy permutation for flat arrays
+_ring_index_cache = {}   # n -> list of ring index arrays (flat indices, in ring order)
+_rotation_perm_cache = {}  # (n, kind) -> list of source flat indices for string rotations, kind in {"cw","ccw","half"}
+
+
+def _build_rings(n):
+    rings = _ring_index_cache.get(n)
+    if rings is not None:
+        return rings
+    rings = []
+    for layer in range(n // 2):
+        elements = ([(layer, j) for j in range(layer, n - layer)] +
+                    [(i, n - layer - 1) for i in range(layer + 1, n - layer - 1)] +
+                    [(n - layer - 1, j) for j in range(n - layer - 1, layer - 1, -1)] +
+                    [(i, layer) for i in range(n - layer - 2, layer, -1)])
+        rings.append(np.array([r * n + c for r, c in elements], dtype=np.intp))
+    _ring_index_cache[n] = rings
+    return rings
+
+
+def _rotation_perm(n, clockwise=True):
+    key = (n, clockwise)
+    perm = _rotation_perms.get(key)
+    if perm is None:
+        perm = np.arange(n * n, dtype=np.intp)
+        shift = 1 if clockwise else -1
+        for ring in _build_rings(n):
+            perm[ring] = np.roll(ring, shift)
+        perm.flags.writeable = False
+        _rotation_perms[key] = perm
+    return perm
+
+
+def _string_rotation_perm(n, kind):
+    """Return perm such that result[perm[dest]] = source[dest] mapping old cell k -> new position."""
+    key = (n, kind)
+    perm = _rotation_perm_cache.get(key)
+    if perm is not None:
+        return perm
+    perm = [0] * (n * n)
+    for k in range(n * n):
+        i, j = divmod(k, n)
+        if kind == "cw":
+            ni, nj = j, n - 1 - i
+        elif kind == "ccw":
+            ni, nj = n - 1 - j, i
+        elif kind == "half":
+            ni, nj = n - 1 - i, n - 1 - j
+        perm[n * ni + nj] = k
+    perm = tuple(perm)
+    _rotation_perm_cache[key] = perm
+    return perm
+
+
+def _rotation_apply(state_string, perm):
+    """Return state_string rotated by the given permutation (fast path)."""
+    return "".join(state_string[perm[k]] for k in range(len(perm)))
+
 # evaluate and score the game state
 def evaluate_game_state(state):
     '''
     check if the game state is a win for a player
     return 1 if player 1 wins, 2 if player 2 wins, and 0 if it is a draw
     '''
-    state_copy = np.copy(state)
-    state_copy[state_copy == 2] = -1
-    players_check = [False, False]
-    for k in range(2):
-        board_size = state_copy.shape[0]
-        state_columns_check = np.prod(np.ones((1, board_size)) @ (state_copy - (-1)**k * board_size * np.eye(board_size))) == 0
-        state_rows_check = np.prod(np.ones((1, board_size)) @ (state_copy.T - (-1)**k * board_size * np.eye(board_size))) == 0
-        state_diagonals_check = np.sum(np.diag(state_copy)) == (-1)**k * board_size or np.sum(np.diag(np.fliplr(state_copy))) == (-1)**k * board_size
-        if state_columns_check or state_rows_check or state_diagonals_check:
-            players_check[k] = True
-    if players_check.count(True) == 2:
+    n = state.shape[0]
+    rows = state.tolist()
+    row_sums = [0] * n
+    col_sums = [0] * n
+    diag_1 = 0
+    diag_2 = 0
+    for i in range(n):
+        row = rows[i]
+        s = 0
+        for j in range(n):
+            value = row[j]
+            w = value if value != 2 else -1
+            s += w
+            col_sums[j] += w
+            if i == j:
+                diag_1 += w
+            if i == n - 1 - j:
+                diag_2 += w
+        row_sums[i] = s
+    n_pos = n
+    n_neg = -n
+    p1 = any(x == n_pos for x in row_sums) or any(x == n_pos for x in col_sums) or diag_1 == n_pos or diag_2 == n_pos
+    p2 = any(x == n_neg for x in row_sums) or any(x == n_neg for x in col_sums) or diag_1 == n_neg or diag_2 == n_neg
+    if p1 and p2:
         return 0
-    elif players_check.count(True) == 1:
-        return 1 + players_check.index(True)
+    elif p1:
+        return 1
+    elif p2:
+        return 2
     else:
         return None
 
 # rotate the game board along a certain direction
-def rotate_board(state, rotate_direction = "clockwise"):
+def rotate_board(state, rotate_direction = "clockwise", out = None):
     '''
     rotate the game board along a certain direction
     rotate_direction can be clockwise, counterclockwise, or still
+    if out is given, the rotated result is written into out (and returned), reusing its buffer
     '''
     n = state.shape[0]
-    rotated_state = state.copy()
-    for layer in range(n // 2):
-        # in order: top row (left to right), right column (excluding corners), bottom row (right to left), left column (excluding corners)
-        elements = ([(layer, j) for j in range(layer, n - layer)] + \
-                    [(i, n - layer - 1) for i in range(layer + 1, n - layer - 1)] + \
-                    [(n - layer - 1, j) for j in range(n - layer - 1, layer - 1, -1)] + \
-                    [(i, layer) for i in range(n - layer - 2, layer, -1)])
-        if rotate_direction.lower() in clockwise_rotation_keywords:
-            for k in range(len(elements)):
-                rotated_state[elements[k]] = state[elements[k - 1]]
-        elif rotate_direction.lower() in counterclockwise_rotation_keywords:
-            for k in range(len(elements)):
-                rotated_state[elements[k]] = state[elements[(k + 1) % len(elements)]]
-        elif rotate_direction.lower() in stand_still_keywords:
-            continue
-        else:
-            print("Direction must be \"clockwise\", \"counterclockwise\", or \"still\".")
-    return rotated_state
+    rotate_direction = rotate_direction.lower() if isinstance(rotate_direction, str) else rotate_direction
+    if rotate_direction in stand_still_keywords:
+        if out is not None:
+            out[:] = state
+            return out
+        return state.copy()
+    elif rotate_direction in clockwise_rotation_keywords:
+        perm = _rotation_perm(n, True)
+    elif rotate_direction in counterclockwise_rotation_keywords:
+        perm = _rotation_perm(n, False)
+    else:
+        print("Direction must be \"clockwise\", \"counterclockwise\", or \"still\".")
+        return state.copy()
+    rotated = state.ravel()[perm].reshape(n, n)
+    if out is not None:
+        out[:] = rotated
+        return out
+    return rotated
 
 # make a player's turn
 def play_turn(state, next_move):
@@ -103,8 +179,7 @@ def play_turn(state, next_move):
             state_copy[add] = player
         else: print("Add move invalid: target cell is not empty!"); return state  # check if the target cell is empty, to place the piece
     else: print("No add move!"); return state  # check if there is an add move, else the turn is invalid
-    final_state = rotate_board(state_copy, str(rotate))  # rotate the board
-    return final_state
+    return rotate_board(state_copy, str(rotate), out = state_copy)  # rotate the board in place
 
 # return a list of all possible moves for a player, from the current game state
 def get_possible_moves(state, rotate_direction = "clockwise", transfer_allowed = True, player = 1):
@@ -114,36 +189,48 @@ def get_possible_moves(state, rotate_direction = "clockwise", transfer_allowed =
     rotate_direction is clockwise, counterclockwise, or still
     '''
     n = state.shape[0]
+    rows = state.tolist()
     opponent = 3 - player
     possible_moves = []
-    # create possible moves with add only
+    append = possible_moves.append
     for row in range(n):
+        row_cells = rows[row]
         for column in range(n):
-            if state[row, column] == 0:
-                possible_moves.append({"player": player, "transfer": None, "add": (row, column), "rotate": rotate_direction})
+            if row_cells[column] == 0:
+                append({"player": player, "transfer": None, "add": (row, column), "rotate": rotate_direction})
     # create possible moves with both transfer and add
     if transfer_allowed:
         for row in range(n):
+            row_cells = rows[row]
             for column in range(n):
-                if state[row, column] == opponent:
-                    for transfer_direction in ["u", "d", "l", "r"]:
+                if row_cells[column] == opponent:
+                    source_cell = (row, column)
+                    for transfer_direction in ("u", "d", "l", "r"):
                         # transfer part
-                        source_cell = (row, column)
                         target_cell = None
-                        if transfer_direction in ["u", "d"]:
-                            target = row + (-1) ** (transfer_direction == "u")
-                            if 0 <= target < n and state[target, column] == 0:
+                        if transfer_direction == "u":
+                            target = row - 1
+                            if target >= 0 and rows[target][column] == 0:
                                 target_cell = (target, column)
-                        elif transfer_direction in ["l", "r"]:
-                            target = column + (-1) ** (transfer_direction == "l")
-                            if 0 <= target < n and state[row, target] == 0:
-                                target_cell = (row, target) 
+                        elif transfer_direction == "d":
+                            target = row + 1
+                            if target < n and rows[target][column] == 0:
+                                target_cell = (target, column)
+                        elif transfer_direction == "l":
+                            target = column - 1
+                            if target >= 0 and row_cells[target] == 0:
+                                target_cell = (row, target)
+                        else:
+                            target = column + 1
+                            if target < n and row_cells[target] == 0:
+                                target_cell = (row, target)
                         # add part
                         if target_cell is not None:
                             for i in range(n):
+                                add_row = rows[i]
                                 for j in range(n):
-                                    if (state[i, j] == 0 and (i, j) != target_cell) or (i, j) == source_cell:
-                                        possible_moves.append({"player": player, "transfer": [(row, column), transfer_direction], "add": (i, j), "rotate": rotate_direction})
+                                    if (add_row[j] == 0 and (i, j) != target_cell) or (i, j) == source_cell:
+                                        append({"player": player, "transfer": [source_cell, transfer_direction], "add": (i, j), "rotate": rotate_direction})
     return possible_moves
 
 # rotate the board 90 degrees, clockwise or counterclockwise, where the board state is given as a string
@@ -158,16 +245,18 @@ def rotate_90_degrees(state_string, rotate_direction = "clockwise", rotate_times
               (n-1-i, n-1-j)    n(n-1-i)+(n-1-j) = n^2-1-k                  double clockwise/counterclockwise rotation
     '''
     n = int(len(state_string)**0.5)
-    new_state_string = len(state_string) * ["_"]
-    if rotate_direction in clockwise_rotation_keywords and rotate_times % 4 == 1 or rotate_direction in counterclockwise_rotation_keywords and rotate_times % 4 == 3:
-        for k in range(len(state_string)): new_state_string[int(n*k+n-1-(n**2+1)*(k//n))] = state_string[k]
-        return "".join(new_state_string)
-    elif rotate_direction in clockwise_rotation_keywords and rotate_times % 4 == 3 or rotate_direction in counterclockwise_rotation_keywords and rotate_times % 4 == 1:
-        for k in range(len(state_string)): new_state_string[int(n*(n-1-k)+(n**2+1)*(k//n))] = state_string[k]
-        return "".join(new_state_string)
-    elif rotate_times % 4 == 2 and rotate_direction not in stand_still_keywords:
-        for k in range(len(state_string)): new_state_string[n**2-1-k] = state_string[k]
-        return "".join(new_state_string)
+    rotate_times = rotate_times % 4
+    if rotate_times in (1, 3):
+        if rotate_direction in clockwise_rotation_keywords and rotate_times == 1 or rotate_direction in counterclockwise_rotation_keywords and rotate_times == 3:
+            perm = _string_rotation_perm(n, "cw")
+        elif rotate_direction in clockwise_rotation_keywords and rotate_times == 3 or rotate_direction in counterclockwise_rotation_keywords and rotate_times == 1:
+            perm = _string_rotation_perm(n, "ccw")
+        else:
+            return state_string
+        return _rotation_apply(state_string, perm)
+    elif rotate_times == 2 and rotate_direction not in stand_still_keywords:
+        perm = _string_rotation_perm(n, "half")
+        return _rotation_apply(state_string, perm)
     else:
         return state_string
 
@@ -180,15 +269,19 @@ def generate_state_strings(players_symbols = players_symbols_default, n = 4, k =
     if k + l > n: print("The sum of k and l must not exceed n."); return None
     positions = list(range(n))  # positions in the string
     all_strings = []  # list to store the generated strings
+    append = all_strings.append
+    sym0 = str(players_symbols[0])
+    sym1 = str(players_symbols[1])
+    sym2 = str(players_symbols[2])
     for x_positions in itertools.combinations(positions, k):  # choose k positions for one symbol in the string
-        remaining_positions = set(positions) - set(x_positions)  # remaining positions for the other symbols in the string
-        for o_positions in itertools.combinations(sorted(remaining_positions), l):  # choose l positions for the other symbol in the string
-            s = [str(players_symbols[0])] * n  # initialize the string with default symbols
+        o_positions_iter = itertools.combinations(sorted(set(positions) - set(x_positions)), l)  # choose l positions for the other symbol in the string
+        for o_positions in o_positions_iter:
+            s = [sym0] * n  # initialize the string with default symbols
             for pos in x_positions:  # place the first symbol in the chosen related positions
-                s[pos] = str(players_symbols[1])
+                s[pos] = sym1
             for pos in o_positions:  # place the second symbol in the chosen related positions
-                s[pos] = str(players_symbols[2])
-            all_strings.append(''.join(s))  # add the string to the list
+                s[pos] = sym2
+            append(''.join(s))  # add the string to the list
     return all_strings
 
 # convert game states to their respective strings
@@ -197,8 +290,11 @@ def convert_states_to_strings(states, players_symbols = players_symbols_default)
     convert game states to their respective strings
     players_symbols is a dictionary mapping player symbols to values (for example: {1: "x", 2: "o", 0: "_"})
     '''
-    strings = ["".join(players_symbols[cell] for row in state for cell in row) for state in states]
-    return strings
+    symbols = players_symbols
+    if all(len(symbols[k]) == 1 for k in (0, 1, 2)):
+        trans = bytes.maketrans(bytes([0, 1, 2]), (symbols[0] + symbols[1] + symbols[2]).encode("ascii"))
+        return [state.astype(np.uint8).ravel().tobytes().translate(trans).decode("ascii") for state in states]
+    return ["".join(symbols[cell] for row in state for cell in row) for state in states]
 
 # convert strings of the game states to their processable form
 def convert_strings_to_states(strings, players_symbols = players_symbols_default):
@@ -207,13 +303,24 @@ def convert_strings_to_states(strings, players_symbols = players_symbols_default
     players_symbols is a dictionary mapping player symbols to values (for example: {1: "x", 2: "o", 0: "_"})
     '''
     inverse_mapping = {v: k for k, v in players_symbols.items()}
+    symbols = players_symbols
     states = []
-    for s in strings:
-        n = int(len(s) ** 0.5)
-        if n * n != len(s):
-            raise ValueError(f"String '{s}' does not represent a square board.")
-        state = [[inverse_mapping[s[r * n + c]] for c in range(n)] for r in range(n)]
-        states.append(np.array(state))
+    append = states.append
+    if all(len(symbols[k]) == 1 for k in (0, 1, 2)):
+        trans = bytes.maketrans((symbols[0] + symbols[1] + symbols[2]).encode("ascii"), b"012")
+        for s in strings:
+            n = int(len(s) ** 0.5)
+            if n * n != len(s):
+                raise ValueError(f"String '{s}' does not represent a square board.")
+            arr = (np.frombuffer(s.encode("ascii").translate(trans), dtype = np.uint8).astype(np.int16) - 48)
+            append(arr.reshape(n, n))
+    else:
+        for s in strings:
+            n = int(len(s) ** 0.5)
+            if n * n != len(s):
+                raise ValueError(f"String '{s}' does not represent a square board.")
+            state = [[inverse_mapping[s[r * n + c]] for c in range(n)] for r in range(n)]
+            append(np.array(state))
     return states
 
 # convert state strings to numbers, with a 1-1 matching, for easier and overall better identification and classification
@@ -223,10 +330,16 @@ def numberify_state_strings(state_strings, players_symbols = players_symbols_def
     state_strings are the strings representations of states
     players_symbols is a dictionary mapping player symbols to values (for example: {1: "x", 2: "o", 0: "_"})
     '''
+    symbols = players_symbols
     values = []
-    for s in state_strings:
-        s2 = s.replace(players_symbols[0], "0").replace(players_symbols[1], "1").replace(players_symbols[2], "2")
-        values.append(int(s2, 3))
+    append = values.append
+    if all(len(symbols[k]) == 1 for k in (0, 1, 2)):
+        trans = str.maketrans({symbols[0]: "0", symbols[1]: "1", symbols[2]: "2"})
+        for s in state_strings:
+            append(int(s.translate(trans), 3))
+    else:
+        for s in state_strings:
+            append(int(s.replace(symbols[0], "0").replace(symbols[1], "1").replace(symbols[2], "2"), 3))
     return values
 
 # convert state numbers to strings, with a 1-1 matching, for easier and better identification and classification
@@ -237,20 +350,24 @@ def stringify_states_numbers(state_numbers, state_length, numbers_base = "3", pl
     numbers_base is the arithmetic base of the numbers in the state_numbers list, it can be "3" (base 3) or "10" (base 10)
     players_symbols is a dictionary mapping player symbols to values (for example: {1: "x", 2: "o", 0: "_"})
     '''
-    state_strings = []
+    symbols = players_symbols
+    digits_strings = []
+    append = digits_strings.append
     if numbers_base == "10":
-        for k in range(len(state_numbers)):
-            num = int(state_numbers[k])
-            if num != 0:
-                digits = []
-                while num:
-                    digits.append(str(num % 3))
-                    num //= 3
-                state_numbers[k] = "".join(reversed(digits))
-            else:
-                state_numbers[k] = str(num)
-    for k in range(len(state_numbers)):
-        state_strings.append(str(state_numbers[k]).replace("0", players_symbols[0]).replace("1", players_symbols[1]).replace("2", players_symbols[2]).rjust(state_length, players_symbols[0]))
+        for num in state_numbers:
+            append(np.base_repr(int(num), base = 3))
+    else:
+        for num in state_numbers:
+            append(str(num))
+    state_strings = []
+    s_append = state_strings.append
+    if all(len(symbols[k]) == 1 for k in (0, 1, 2)):
+        trans = str.maketrans({"0": symbols[0], "1": symbols[1], "2": symbols[2]})
+        for s in digits_strings:
+            s_append(s.translate(trans).rjust(state_length, symbols[0]))
+    else:
+        for s in digits_strings:
+            s_append(s.replace("0", symbols[0]).replace("1", symbols[1]).replace("2", symbols[2]).rjust(state_length, symbols[0]))
     return state_strings
 
 # sort the given state strings based on their corresponding numbers
@@ -299,18 +416,19 @@ def find_unique_rotationally_symmetric_states(state_strings, players_symbols = p
     # unique_state_numbers = numberify_state_strings(unique_state_strings, players_symbols)
     unique_strings = []
     unique_numbers = []
+    seen_unique_numbers = set()  # all rotation-related numbers of the kept (unique) states
+    append_string = unique_strings.append
+    append_number = unique_numbers.append
     for k in range(len(state_strings)):
         state = state_strings[k]
         rotated_states = [state, rotate_90_degrees(state, "cw", 1), rotate_90_degrees(state, "cw", 2), rotate_90_degrees(state, "cw", 3)]
         rotated_states_numbers = numberify_state_strings(rotated_states, players_symbols)
-        is_unique = True
-        for num in rotated_states_numbers:
-            if num in unique_numbers:
-                is_unique = False
+        is_unique = not any(num in seen_unique_numbers for num in rotated_states_numbers)
         if is_unique:
             min_index = rotated_states_numbers.index(min(rotated_states_numbers))
-            unique_numbers.append(rotated_states_numbers[min_index])
-            unique_strings.append(rotated_states[min_index])
+            seen_unique_numbers.update(rotated_states_numbers)
+            append_number(rotated_states_numbers[min_index])
+            append_string(rotated_states[min_index])
     zipped_data = zip(unique_strings, unique_numbers)
     sorted_pairs = sorted(zipped_data, key = lambda x: x[1])
     try:
