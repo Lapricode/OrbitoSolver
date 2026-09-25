@@ -6,10 +6,181 @@ import itertools
 import orbital_logic_game_functions as olgf
 
 
-def check_game_play_probabilities(board_size = 3, games_played = 10000, rotate_direction = "1", transfer_allowed = True, players_symbols = {1: "x", 2: "o", 0: "_"}, verbose_print = False):
+def _sample_move_encoded(row, player, transfer_allowed, n, rng):
+    """Pick one random legal move for a single board, returned encoded as
+    (transfer_source_flat, transfer_dir, add_flat) with -1 meaning "none".
+
+    The selection is uniform over get_possible_moves' enumeration order:
+    first the add-only moves (row-major over empty cells), then the transfer
+    moves (row-major over opponent pieces, then u/d/l/r, then the add cells).
+    """
+    L = n * n
+    empties = [k for k in range(L) if row[k] == 0]
+    e = len(empties)
+    transfers = []
+    if transfer_allowed:
+        opponent = 3 - player
+        for src in range(L):
+            if row[src] == opponent:
+                r, c = divmod(src, n)
+                if r > 0 and row[src - n] == 0:
+                    transfers.append((src, 0, src - n))
+                if r < n - 1 and row[src + n] == 0:
+                    transfers.append((src, 1, src + n))
+                if c > 0 and row[src - 1] == 0:
+                    transfers.append((src, 2, src - 1))
+                if c < n - 1 and row[src + 1] == 0:
+                    transfers.append((src, 3, src + 1))
+    t = len(transfers)
+    total = e + t * e  # every transfer produces exactly e add options
+    pick = int(rng.integers(0, total))
+    if pick < e:
+        return -1, -1, empties[pick]
+    v = pick - e
+    q, r = divmod(v, e)
+    src, direction, target = transfers[q]
+    position_in_add_order = 0
+    for k in range(L):
+        if (row[k] == 0 and k != target) or k == src:
+            if position_in_add_order == r:
+                return src, direction, k
+            position_in_add_order += 1
+    return src, direction, src
+
+
+def _play_random_games_batch(
+    board_size,
+    games_played,
+    rotate_direction,
+    transfer_allowed,
+    batch_size=None,
+    seed=None,
+):
+    """CPU batched rewrite of the per-game random play loop.
+
+    All running games advance in lockstep: one move is sampled per active game,
+    then every move is applied together via vectorized numpy operations and the
+    whole batch is evaluated at once. Returns the same ``counters`` dictionary
+    produced by the scalar loop, so the aggregate statistics are identical.
+    """
+    n = board_size
+    L = n * n
+    rotate_keyword = str(rotate_direction).lower()
+    if rotate_keyword in olgf.clockwise_rotation_keywords:
+        perm = olgf._rotation_perm(n, True)
+    elif rotate_keyword in olgf.counterclockwise_rotation_keywords:
+        perm = olgf._rotation_perm(n, False)
+    else:
+        perm = np.arange(L, dtype=np.intp)
+    neighbor_delta = np.asarray((-n, n, -1, 1), dtype=np.intp)
+
+    counters = {
+        "1_start_1_win": 0, "1_start_2_win": 0,
+        "2_start_1_win": 0, "2_start_2_win": 0,
+        "1_start_draw": 0, "2_start_draw": 0,
+    }
+    rng = np.random.default_rng(seed)
+    batch_size = batch_size if batch_size and batch_size > 0 else max(64, min(1024, games_played))
+    games_done = 0
+
+    while games_done < games_played:
+        m = min(batch_size, games_played - games_done)
+        boards = np.zeros((m, L), dtype=np.int64)
+        start_players = np.where(((np.arange(m) + games_done) % 2) == 0, 2, 1).astype(np.int64)
+        active = np.ones(m, dtype=bool)
+        for step in range(L):
+            if not active.any():
+                break
+            players = np.where((step % 2) == 0, start_players, 3 - start_players)
+            transfer_src = np.full(m, -1, dtype=np.int64)
+            transfer_dir = np.full(m, -1, dtype=np.int64)
+            add_src = np.full(m, -1, dtype=np.int64)
+            for i in np.flatnonzero(active):
+                tsrc, tdir, add = _sample_move_encoded(
+                    boards[i], int(players[i]), transfer_allowed, n, rng
+                )
+                transfer_src[i] = tsrc
+                transfer_dir[i] = tdir
+                add_src[i] = add
+            m_transfer = transfer_src >= 0
+            if m_transfer.any():
+                rows = np.flatnonzero(m_transfer)
+                s = transfer_src[m_transfer]
+                trg = s + neighbor_delta[transfer_dir[m_transfer]]
+                src_vals = boards[rows, s].copy()
+                boards[rows, trg] = src_vals
+                boards[rows, s] = 0
+            m_add = add_src >= 0
+            if m_add.any():
+                rows = np.flatnonzero(m_add)
+                boards[rows, add_src[m_add]] = players[m_add]
+            boards = boards[:, perm]
+            cube = boards.reshape(m, n, n)
+            w = np.where(cube == 2, -1, cube)
+            ar = np.arange(n)
+            row_sums = w.sum(axis=2)
+            col_sums = w.sum(axis=1)
+            d1 = w[:, ar, ar].sum(axis=1)
+            d2 = w[:, ar, n - 1 - ar].sum(axis=1)
+            p1 = (row_sums == n).any(axis=1) | (col_sums == n).any(axis=1) | (d1 == n) | (d2 == n)
+            p2 = (row_sums == -n).any(axis=1) | (col_sums == -n).any(axis=1) | (d1 == -n) | (d2 == -n)
+            results = np.where(p1 & p2, 0, np.where(p1, 1, np.where(p2, 2, -1)))
+            newly_finished = ((results == 1) | (results == 2)) & active
+            if newly_finished.any():
+                for i in np.flatnonzero(newly_finished):
+                    if start_players[i] == 1:
+                        if results[i] == 1:
+                            counters["1_start_1_win"] += 1
+                        elif results[i] == 2:
+                            counters["1_start_2_win"] += 1
+                    else:
+                        if results[i] == 1:
+                            counters["2_start_1_win"] += 1
+                        elif results[i] == 2:
+                            counters["2_start_2_win"] += 1
+                active &= ~newly_finished
+        if active.any():
+            for i in np.flatnonzero(active):
+                if start_players[i] == 1:
+                    counters["1_start_draw"] += 1
+                else:
+                    counters["2_start_draw"] += 1
+        games_done += m
+
+    return counters
+
+
+def _print_probabilities(counters, games_played, start_time):
+    print()
+    print(f"Total games played:                {games_played:10d}")
+    print(f"Player 1 starts:                   {counters['1_start_1_win'] + counters['1_start_2_win'] + counters['1_start_draw']:10d}")
+    print(f"Player 2 starts:                   {counters['2_start_1_win'] + counters['2_start_2_win'] + counters['2_start_draw']:10d}")
+    print()
+    print(f"Player 1 wins:                     {counters['1_start_1_win'] + counters['2_start_1_win']:10d} \t|\t {(counters['1_start_1_win'] + counters['2_start_1_win'])/games_played*100:.2f}%")
+    print(f"   - Player 1 starts and wins:     {counters['1_start_1_win']:10d} \t|\t {counters['1_start_1_win']/games_played*100:.2f}%")
+    print(f"   - Player 2 starts and loses:    {counters['2_start_1_win']:10d} \t|\t {counters['2_start_1_win']/games_played*100:.2f}%")
+    print()
+    print(f"Player 2 wins:                     {counters['2_start_2_win'] + counters['1_start_2_win']:10d} \t|\t {(counters['2_start_2_win'] + counters['1_start_2_win'])/games_played*100:.2f}%")
+    print(f"   - Player 1 starts and loses:    {counters['1_start_2_win']:10d} \t|\t {counters['1_start_2_win']/games_played*100:.2f}%")
+    print(f"   - Player 2 starts and wins:     {counters['2_start_2_win']:10d} \t|\t {counters['2_start_2_win']/games_played*100:.2f}%")
+    print()
+    print(f"Draws:                             {counters['1_start_draw'] + counters['2_start_draw']:10d} \t|\t {(counters['1_start_draw'] + counters['2_start_draw'])/games_played*100:.2f}%")
+    print(f"   - Player 1 starts and draws:    {counters['1_start_draw']:10d} \t|\t {counters['1_start_draw']/games_played*100:.2f}%")
+
+    print(f"\nTime taken: {time.time() - start_time:.2f} seconds")
+
+
+def check_game_play_probabilities(board_size = 3, games_played = 10000, rotate_direction = "1", transfer_allowed = True, players_symbols = {1: "x", 2: "o", 0: "_"}, verbose_print = False, batch_size = None, seed = None):
     start_time = time.time()
     olgf.print_game_statistics(board_size)
     counters = {"1_start_1_win": 0, "1_start_2_win": 0, "2_start_1_win": 0, "2_start_2_win": 0, "1_start_draw": 0, "2_start_draw": 0}
+    if not verbose_print:
+        counters = _play_random_games_batch(
+            board_size, games_played, rotate_direction, transfer_allowed,
+            batch_size=batch_size, seed=seed,
+        )
+        _print_probabilities(counters, games_played, start_time)
+        return counters
     start_player = 1
     for i in range(games_played):
         state = np.zeros((board_size, board_size))
@@ -45,24 +216,8 @@ def check_game_play_probabilities(board_size = 3, games_played = 10000, rotate_d
                     counters["2_start_draw"] += 1
                 if verbose_print: print("It's a draw\n")
                 break
-    print()
-    print(f"Total games played:                {games_played:10d}")
-    print(f"Player 1 starts:                   {counters['1_start_1_win'] + counters['1_start_2_win'] + counters['1_start_draw']:10d}")
-    print(f"Player 2 starts:                   {counters['2_start_1_win'] + counters['2_start_2_win'] + counters['2_start_draw']:10d}")
-    print()
-    print(f"Player 1 wins:                     {counters['1_start_1_win'] + counters['2_start_1_win']:10d} \t|\t {(counters['1_start_1_win'] + counters['2_start_1_win'])/games_played*100:.2f}%")
-    print(f"   - Player 1 starts and wins:     {counters['1_start_1_win']:10d} \t|\t {counters['1_start_1_win']/games_played*100:.2f}%")
-    print(f"   - Player 2 starts and loses:    {counters['2_start_1_win']:10d} \t|\t {counters['2_start_1_win']/games_played*100:.2f}%")
-    print()
-    print(f"Player 2 wins:                     {counters['2_start_2_win'] + counters['1_start_2_win']:10d} \t|\t {(counters['2_start_2_win'] + counters['1_start_2_win'])/games_played*100:.2f}%")
-    print(f"   - Player 1 starts and loses:    {counters['1_start_2_win']:10d} \t|\t {counters['1_start_2_win']/games_played*100:.2f}%")
-    print(f"   - Player 2 starts and wins:     {counters['2_start_2_win']:10d} \t|\t {counters['2_start_2_win']/games_played*100:.2f}%")
-    print()
-    print(f"Draws:                             {counters['1_start_draw'] + counters['2_start_draw']:10d} \t|\t {(counters['1_start_draw'] + counters['2_start_draw'])/games_played*100:.2f}%")
-    print(f"   - Player 1 starts and draws:    {counters['1_start_draw']:10d} \t|\t {counters['1_start_draw']/games_played*100:.2f}%")
-    print(f"   - Player 2 starts and draws:    {counters['2_start_draw']:10d} \t|\t {counters['2_start_draw']/games_played*100:.2f}%")
-
-    print(f"\nTime taken: {time.time() - start_time:.2f} seconds")
+    _print_probabilities(counters, games_played, start_time)
+    return counters
 
 
 if __name__ == "__main__":

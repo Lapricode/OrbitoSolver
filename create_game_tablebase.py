@@ -1,6 +1,7 @@
 import argparse
 import itertools
 import json
+import multiprocessing as mp
 import os
 import sys
 
@@ -206,6 +207,18 @@ def save_game_record(
     print(f"Record saved to {file_path}")
 
 
+def _solve_position_task(item):
+    state, rotation, transfer_allowed, player_turn = item
+    return _solve_position(state, rotation, transfer_allowed, player_turn)
+
+
+def _solve_states_parallel(states, rotation, transfer_allowed, player_turn, workers):
+    """Solve many independent positions using a pool of worker processes."""
+    tasks = [(state, rotation, transfer_allowed, player_turn) for state in states]
+    with mp.Pool(workers) as pool:
+        return pool.map(_solve_position_task, tasks)
+
+
 def _iter_states_for_completion(grid_size, completion):
     cell_count = grid_size * grid_size
     for occupied in itertools.combinations(range(cell_count), completion):
@@ -216,11 +229,13 @@ def _iter_states_for_completion(grid_size, completion):
             yield np.asarray(state_values, dtype=int).reshape((grid_size, grid_size))
 
 
-def create_game_tablebase(base_dir="game_tablebase", grid_size=2, show_progress=True):
+def create_game_tablebase(base_dir="game_tablebase", grid_size=2, show_progress=True, workers=None):
     """Solve every board state for an n x n grid and all rule combinations."""
     grid_size = int(grid_size)
     if grid_size < 1:
         raise ValueError("grid_size must be positive")
+    if workers is not None:
+        workers = int(workers)
 
     state_count = 3 ** (grid_size * grid_size)
     context_count = len(ROTATION_DIRECTIONS) * len(TRANSFER_RULES) * len(PLAYER_TURNS)
@@ -238,24 +253,29 @@ def create_game_tablebase(base_dir="game_tablebase", grid_size=2, show_progress=
             for rotation in ROTATION_DIRECTIONS:
                 for transfer_allowed in TRANSFER_RULES:
                     for player_turn in PLAYER_TURNS:
-                        records_by_file = {}
-                        file_paths = {}
-                        for state in _iter_states_for_completion(grid_size, completion):
-                            if completion not in file_paths:
-                                file_paths[completion] = get_file_path(
-                                    base_dir,
-                                    state,
-                                    rotation,
-                                    transfer_allowed,
-                                    player_turn,
-                                )
-                            file_path = file_paths[completion]
-                            solution = _solve_position(
-                                state,
+                        states = list(_iter_states_for_completion(grid_size, completion))
+                        file_path = get_file_path(
+                            base_dir,
+                            states[0],
+                            rotation,
+                            transfer_allowed,
+                            player_turn,
+                        )
+                        if workers is not None and workers > 1 and len(states) > 1:
+                            solutions = _solve_states_parallel(
+                                states,
                                 rotation,
                                 transfer_allowed,
                                 player_turn,
+                                workers,
                             )
+                        else:
+                            solutions = [
+                                _solve_position(state, rotation, transfer_allowed, player_turn)
+                                for state in states
+                            ]
+                        records = []
+                        for state, solution in zip(states, solutions):
                             record = _make_record(
                                 state,
                                 solution,
@@ -266,13 +286,11 @@ def create_game_tablebase(base_dir="game_tablebase", grid_size=2, show_progress=
                             if record["id"] in position_ids:
                                 raise RuntimeError(f"Duplicate position ID: {record['id']}")
                             position_ids.add(record["id"])
-                            records_by_file.setdefault(file_path, []).append(record)
+                            records.append(record)
                             if progress is not None:
                                 progress.update()
-
-                        for file_path in sorted(records_by_file):
-                            _write_records(file_path, records_by_file[file_path])
-                            files_written += 1
+                        _write_records(file_path, records)
+                        files_written += 1
     finally:
         if progress is not None:
             progress.close()
@@ -284,9 +302,9 @@ def create_game_tablebase(base_dir="game_tablebase", grid_size=2, show_progress=
     }
 
 
-def generate_tablebase(base_dir="game_tablebase", grid_size=2, show_progress=True):
+def generate_tablebase(base_dir="game_tablebase", grid_size=2, show_progress=True, workers=None):
     """Backward-compatible alias for create_game_tablebase."""
-    return create_game_tablebase(base_dir, grid_size, show_progress)
+    return create_game_tablebase(base_dir, grid_size, show_progress, workers=workers)
 
 
 def solve_all_2x2_positions(base_dir="game_tablebase", show_progress=True):
@@ -313,6 +331,12 @@ def main(argv=None):
         action="store_true",
         help="disable terminal progress output",
     )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=None,
+        help="number of worker processes to use for solving positions in parallel",
+    )
     args = parser.parse_args(argv)
     if args.grid_size < 1:
         parser.error("grid size must be positive")
@@ -321,6 +345,7 @@ def main(argv=None):
         base_dir=args.base_dir,
         grid_size=args.grid_size,
         show_progress=not args.no_progress,
+        workers=args.workers,
     )
     print(
         f"Saved {result['positions']} positions to {result['files']} JSON files "

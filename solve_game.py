@@ -1,4 +1,5 @@
 import math
+import multiprocessing as mp
 import os
 import numpy as np
 import time
@@ -293,6 +294,51 @@ def _best_move_at(b, player, depth, tt, P):
 _DIGITS = ("u", "d", "l", "r")
 
 
+# ---------------------------------------------------------------------------
+# Optional parallel root search
+# The top-level (root) move evaluations are completely independent subtrees,
+# so they can be dispatched to a pool of worker processes. Each worker keeps
+# its own transposition table; the tables are merged afterwards so the
+# principal-variation reconstruction still hits exact entries. With workers
+# left as None the original single-process search is used, which is exact and
+# bit-for-bit identical to before.
+# ---------------------------------------------------------------------------
+
+_WORKER_P = None
+
+
+def _worker_init_parallel(P):
+    global _WORKER_P
+    _WORKER_P = P
+
+
+def _worker_root_eval(task):
+    """Evaluate the subtree after one root move for the given player.
+
+    Returns (value, move, tt) where the value is already negated so it uses
+    the same sign convention as the serial root loop, and tt is the worker's
+    local transposition table (freed from pruning bounds by searching each
+    root child fully).
+    """
+    b, move, player, depth = task
+    P = _WORKER_P
+    child = _apply_move(b, move, player, P[6], P[5])
+    tt = {}
+    v = -_negamax(child, 3 - player, depth + 1, -INF, INF, tt, P)
+    return v, move, tt
+
+
+def _solve_root_moves_parallel(b, player, depth, moves, P, workers):
+    """Values for every root move, computed on a pool of worker processes."""
+    tasks = [(b, move, player, depth) for move in moves]
+    with mp.Pool(workers, initializer=_worker_init_parallel, initargs=(P,)) as pool:
+        results = pool.map(_worker_root_eval, tasks)
+    merged_tt = {}
+    for _v, _m, sub_tt in results:
+        merged_tt.update(sub_tt)
+    return results, merged_tt
+
+
 def _move_to_dict(move, player, rotate_direction, n):
     """Convert a compact (transfer_source, transfer_dir, add_cell) move back
     into the dictionary format used by the public API."""
@@ -335,12 +381,14 @@ def minimax(state, rotate_direction = "clockwise", transfer_allowed = True, play
     return value
 
 
-def find_best_move(state, rotate_direction = "clockwise", transfer_allowed = True, player = 1):
+def find_best_move(state, rotate_direction = "clockwise", transfer_allowed = True, player = 1, workers = None):
     """
     Determines the best move for the given player from the current state.
     Parameters:
         state: the current game state (a numpy array)
         player: the player whose move is to be determined (1 or 2)
+        workers: optional number of worker processes used to evaluate the
+            root move subtrees in parallel (None / 1 = single process)
     Returns:
         A tuple (best_move, best_value) where best_move is the move (a dictionary)
         and best_value is its minimax evaluation.
@@ -352,9 +400,20 @@ def find_best_move(state, rotate_direction = "clockwise", transfer_allowed = Tru
     if not moves:
         return None, -math.inf
     moves = _order_moves(moves, b, player, P, None)
-    tt = {}
     best = -INF
     best_move = None
+    if workers is not None and int(workers) > 1 and len(moves) > 1:
+        try:
+            results, _tt = _solve_root_moves_parallel(b, player, 0, moves, P, int(workers))
+        except Exception:
+            results = None
+        if results is not None:
+            for v, move, _sub in results:
+                if v > best:
+                    best = v
+                    best_move = move
+            return _move_to_dict(best_move, player, rotate_direction, n), best
+    tt = {}
     for move in moves:
         child = _apply_move(b, move, player, P[6], P[5])
         v = -_negamax(child, 3 - player, 1, -INF, INF, tt, P)
@@ -412,7 +471,7 @@ def estimated_game_result(score, players_symbols = {1: "x", 2: "o", 0: "_"}, sta
         return "It's a draw!"
 
 
-def solve_game(state, rotate_direction = "clockwise", transfer_allowed = True, player = 1, maximizing_player = None, depth = 0, alpha = -math.inf, beta = math.inf):
+def solve_game(state, rotate_direction = "clockwise", transfer_allowed = True, player = 1, maximizing_player = None, depth = 0, alpha = -math.inf, beta = math.inf, workers = None):
     """
     Recursively solves the game from the given state, returning a dictionary with:
         - "score": the minimax evaluation score,
@@ -440,8 +499,30 @@ def solve_game(state, rotate_direction = "clockwise", transfer_allowed = True, p
     b = tuple(state.ravel().tolist())
 
     tt = {}
-    value = _negamax(b, player, depth, -INF if alpha == -math.inf else alpha,
-                     INF if beta == math.inf else beta, tt, P)
+    if workers is not None and int(workers) > 1 and alpha == -math.inf and beta == math.inf:
+        root_winner = _winner(b, P[3])
+        if root_winner is not None:
+            if root_winner == player:
+                value = WIN_SCORE - depth
+            elif root_winner == 0:
+                value = 0
+            else:
+                value = depth - WIN_SCORE
+        else:
+            root_moves = _gen_moves(b, player, P[7], P[5], P[1])
+            if not root_moves:
+                value = 0
+            else:
+                root_moves = _order_moves(root_moves, b, player, P, None)
+                try:
+                    results, tt = _solve_root_moves_parallel(b, player, depth, root_moves, P, int(workers))
+                    value = max(v for v, _m, _t in results)
+                except Exception:
+                    value = _negamax(b, player, depth, -INF if alpha == -math.inf else alpha,
+                                     INF if beta == math.inf else beta, tt, P)
+    else:
+        value = _negamax(b, player, depth, -INF if alpha == -math.inf else alpha,
+                         INF if beta == math.inf else beta, tt, P)
 
     # Reconstruct the principal variation by following the exact best moves,
     # falling back to a clean exact re-search whenever a TT entry is bounded.
