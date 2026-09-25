@@ -192,6 +192,60 @@ def _state_sequence(record, state, moves_sequence):
     return states
 
 
+def _swap_game_result(game_result):
+    if not isinstance(game_result, str):
+        return game_result
+    return {
+        "player1_wins": "player2_wins",
+        "player2_wins": "player1_wins",
+    }.get(game_result, game_result)
+
+
+def _map_compressed_record(record, representation, state, rotate_direction):
+    solution = record.get("solution", {})
+    stored_moves = solution.get("moves_sequence")
+    if stored_moves is None:
+        best_move = solution.get("best_move")
+        stored_moves = [] if best_move is None else [best_move]
+
+    symmetry = representation["symmetry"]
+    swapped = representation["swapped"]
+    grid_size = state.shape[0]
+    mapped_solution = dict(solution)
+    mapped_solution["moves_sequence"] = [
+        tablebase.map_compressed_move(
+            move,
+            symmetry,
+            grid_size,
+            rotate_direction,
+            swapped,
+        )
+        for move in stored_moves
+    ]
+    if solution.get("states_sequence"):
+        mapped_solution["states_sequence"] = [
+            tablebase.map_compressed_state(item, symmetry, swapped)
+            for item in solution["states_sequence"]
+        ]
+    elif "states_sequence" in solution:
+        mapped_solution["states_sequence"] = []
+    if solution.get("best_move") is not None:
+        mapped_solution["best_move"] = tablebase.map_compressed_move(
+            solution["best_move"],
+            symmetry,
+            grid_size,
+            rotate_direction,
+            swapped,
+        )
+    if swapped:
+        mapped_solution["game_result"] = _swap_game_result(solution.get("game_result"))
+
+    mapped_record = dict(record)
+    mapped_record["position"] = np.asarray(state, dtype=int).tolist()
+    mapped_record["solution"] = mapped_solution
+    return mapped_record
+
+
 def _format_solution(
     record,
     state,
@@ -254,34 +308,60 @@ def get_solution(
     player_turn,
     rotate_direction="clockwise",
     transfer_allowed=True,
-    base_dir="game_tablebase",
+    base_dir=None,
     grid_size=None,
     players_symbols=None,
+    tablebase_type="compressed",
 ):
     """Return a formatted solution or POSITION_NOT_FOUND.
 
     ``state`` is a row-major string such as ``"0120"`` or an array-like
     object. When ``grid_size`` is omitted, it is inferred from the state
-    length. The returned text follows the game, rules, and perfect-play
-    evolution format used by ``solve_game.py``.
+    length. The compressed tablebase is used by default. The returned text
+    follows the game, rules, and perfect-play evolution format used by
+    ``solve_game.py``.
     """
     state_array = _state_from_input(state, grid_size)
     player = _normalise_player(player_turn)
     rotation = _normalise_rotation(rotate_direction)
     transfer = _normalise_transfer_allowed(transfer_allowed)
+    tablebase_type = tablebase.normalise_tablebase_type(tablebase_type)
+    base_dir = tablebase.default_base_dir(tablebase_type) if base_dir is None else base_dir
     symbols = dict(_DEFAULT_PLAYER_SYMBOLS if players_symbols is None else players_symbols)
     if any(symbol not in symbols for symbol in (0, 1, 2)):
         raise ValueError("players_symbols must define symbols for 0, 1, and 2")
 
+    if tablebase_type == "compressed":
+        representation = tablebase.compressed_representation(
+            state_array,
+            player,
+            rotation,
+        )
+        lookup_state = representation["state"]
+        lookup_rotation = representation["stored_rotation"]
+        lookup_player = 1
+    else:
+        representation = None
+        lookup_state = state_array
+        lookup_rotation = rotation
+        lookup_player = player
+
     record = _find_record(
         base_dir,
-        state_array,
-        rotation,
+        lookup_state,
+        lookup_rotation,
         transfer,
-        player,
+        lookup_player,
     )
     if record is None:
         return POSITION_NOT_FOUND
+    if representation is not None:
+        record = _map_compressed_record(
+            record,
+            representation,
+            state_array,
+            rotation,
+        )
     return _format_solution(
         record,
         state_array,
@@ -336,10 +416,19 @@ def main(argv=None):
         help="grid size; inferred from the state when omitted",
     )
     parser.add_argument(
+        "--tablebase",
+        "--tablebase-type",
+        "--tablebase_type",
+        dest="tablebase_type",
+        choices=tablebase.TABLEBASE_TYPES,
+        default="compressed",
+        help="tablebase to query (default: compressed)",
+    )
+    parser.add_argument(
         "-b",
         "--base-dir",
-        default="game_tablebase",
-        help="tablebase directory (default: game_tablebase)",
+        default=None,
+        help="tablebase directory (default: selected tablebase directory)",
     )
     args = parser.parse_args(argv)
     state = args.state_option if args.state_option is not None else args.state
@@ -354,6 +443,7 @@ def main(argv=None):
             transfer_allowed=args.transfer_allowed,
             base_dir=args.base_dir,
             grid_size=args.grid_size,
+            tablebase_type=args.tablebase_type,
         )
     except ValueError as error:
         parser.error(str(error))

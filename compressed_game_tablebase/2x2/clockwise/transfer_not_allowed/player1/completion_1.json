@@ -1,0 +1,139 @@
+[
+  {
+    "id": "2x2_0001_clockwise_transfer_not_allowed_player1",
+    "position": [
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        1
+      ]
+    ],
+    "solution": {
+      "score": 999,
+      "game_result": "player1_wins",
+      "best_move": {
+        "player": 1,
+        "transfer": null,
+        "add": [
+          0,
+          0
+        ],
+        "rotate": "clockwise"
+      },
+      "moves_sequence": [
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            0
+          ],
+          "rotate": "clockwise"
+        }
+      ],
+      "states_sequence": [
+        [
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0,
+            1
+          ],
+          [
+            1,
+            0
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "2x2_0002_clockwise_transfer_not_allowed_player1",
+    "position": [
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        2
+      ]
+    ],
+    "solution": {
+      "score": -998,
+      "game_result": "player2_wins",
+      "best_move": {
+        "player": 1,
+        "transfer": null,
+        "add": [
+          0,
+          0
+        ],
+        "rotate": "clockwise"
+      },
+      "moves_sequence": [
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            0
+          ],
+          "rotate": "clockwise"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            0,
+            0
+          ],
+          "rotate": "clockwise"
+        }
+      ],
+      "states_sequence": [
+        [
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            2
+          ]
+        ],
+        [
+          [
+            0,
+            1
+          ],
+          [
+            2,
+            0
+          ]
+        ],
+        [
+          [
+            2,
+            2
+          ],
+          [
+            0,
+            1
+          ]
+        ]
+      ]
+    }
+  }
+]

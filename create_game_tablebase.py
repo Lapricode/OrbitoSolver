@@ -16,8 +16,25 @@ except ImportError:
 
 
 ROTATION_DIRECTIONS = ("still", "clockwise", "counterclockwise")
+COMPRESSED_ROTATION_DIRECTIONS = ("still", "clockwise")
 TRANSFER_RULES = (False, True)
 PLAYER_TURNS = (1, 2)
+COMPRESSED_PLAYER_TURNS = (1,)
+TABLEBASE_TYPES = ("compressed", "full")
+_ROTATION_ALIASES = {
+    "clockwise": "clockwise",
+    "cw": "clockwise",
+    "counterclockwise": "counterclockwise",
+    "ccw": "counterclockwise",
+    "still": "still",
+    "s": "still",
+}
+_DIRECTION_DELTAS = {
+    "u": (-1, 0),
+    "d": (1, 0),
+    "l": (0, -1),
+    "r": (0, 1),
+}
 
 
 class _FallbackProgress:
@@ -78,6 +95,137 @@ def _transfer_name(transfer_allowed):
 
 def _player_name(player_turn):
     return "player1" if player_turn == 1 else "player2"
+
+
+def normalise_tablebase_type(tablebase_type):
+    name = str(tablebase_type).strip().lower()
+    if name not in TABLEBASE_TYPES:
+        choices = ", ".join(TABLEBASE_TYPES)
+        raise ValueError(f"tablebase_type must be one of: {choices}")
+    return name
+
+
+def default_base_dir(tablebase_type):
+    tablebase_type = normalise_tablebase_type(tablebase_type)
+    return "compressed_game_tablebase" if tablebase_type == "compressed" else "game_tablebase"
+
+
+def _canonical_rotation(rotation):
+    name = str(rotation).strip().lower()
+    if name not in _ROTATION_ALIASES:
+        choices = ", ".join(ROTATION_DIRECTIONS)
+        raise ValueError(f"rotation must be one of: {choices}")
+    return _ROTATION_ALIASES[name]
+
+
+def _swap_player_values(state):
+    state = np.asarray(state, dtype=int)
+    return np.where(state == 1, 2, np.where(state == 2, 1, state)).astype(int)
+
+
+def _apply_symmetry(state, symmetry):
+    reflection, turns = symmetry
+    result = np.asarray(state, dtype=int)
+    if reflection:
+        result = result[:, ::-1]
+    if turns:
+        result = np.rot90(result, -turns)
+    return np.ascontiguousarray(result, dtype=int).copy()
+
+
+def _invert_symmetry(symmetry):
+    reflection, turns = symmetry
+    if reflection:
+        return symmetry
+    return reflection, (-turns) % 4
+
+
+def _transform_position(symmetry, position, grid_size):
+    row, column = int(position[0]), int(position[1])
+    if symmetry[0]:
+        column = grid_size - 1 - column
+    for _ in range(symmetry[1]):
+        row, column = column, grid_size - 1 - row
+    return row, column
+
+
+def _transform_direction(symmetry, source, direction, grid_size):
+    delta_row, delta_column = _DIRECTION_DELTAS[str(direction).lower()]
+    target = (int(source[0]) + delta_row, int(source[1]) + delta_column)
+    source = _transform_position(symmetry, source, grid_size)
+    target = _transform_position(symmetry, target, grid_size)
+    mapped_delta = (target[0] - source[0], target[1] - source[1])
+    for name, delta in _DIRECTION_DELTAS.items():
+        if delta == mapped_delta:
+            return name
+    raise ValueError(f"unsupported transfer direction: {direction}")
+
+
+def _symmetry_transformations(rotate_direction):
+    rotation = _canonical_rotation(rotate_direction)
+    if rotation == "still":
+        return tuple((reflection, turns) for reflection in (False, True) for turns in range(4))
+    if rotation == "clockwise":
+        return tuple((False, turns) for turns in range(4))
+    return tuple((True, turns) for turns in range(4))
+
+
+def canonicalize_state(state, rotate_direction):
+    state = _as_state(state)
+    best_key = None
+    best_state = None
+    best_symmetry = None
+    for symmetry in _symmetry_transformations(rotate_direction):
+        candidate = _apply_symmetry(state, symmetry)
+        key = tuple(int(cell) for cell in candidate.ravel())
+        if best_key is None or key < best_key:
+            best_key = key
+            best_state = candidate
+            best_symmetry = symmetry
+    rotation = _canonical_rotation(rotate_direction)
+    stored_rotation = "clockwise" if rotation == "counterclockwise" else rotation
+    return best_state, best_symmetry, stored_rotation
+
+
+def compressed_representation(state, player_turn, rotate_direction):
+    state = _as_state(state)
+    player_turn = int(player_turn)
+    if player_turn not in (1, 2):
+        raise ValueError("player_turn must be 1 or 2")
+    swapped = player_turn == 2
+    oriented_state = _swap_player_values(state) if swapped else state
+    canonical, symmetry, stored_rotation = canonicalize_state(oriented_state, rotate_direction)
+    return {
+        "state": canonical,
+        "symmetry": symmetry,
+        "stored_rotation": stored_rotation,
+        "swapped": swapped,
+    }
+
+
+def map_compressed_state(state, symmetry, swap_players=False):
+    mapped = _apply_symmetry(state, _invert_symmetry(symmetry))
+    return _swap_player_values(mapped) if swap_players else mapped
+
+
+def map_compressed_move(move, symmetry, grid_size, rotate_direction, swap_players=False):
+    inverse = _invert_symmetry(symmetry)
+    mapped = dict(move)
+    if mapped.get("add") is not None:
+        mapped["add"] = _transform_position(inverse, mapped["add"], grid_size)
+    if mapped.get("transfer") is not None:
+        source = mapped["transfer"][0]
+        direction = _transform_direction(
+            inverse,
+            source,
+            direction=mapped["transfer"][1],
+            grid_size=grid_size,
+        )
+        mapped["transfer"] = [_transform_position(inverse, source, grid_size), direction]
+    if swap_players:
+        mapped["player"] = 3 - int(mapped["player"])
+    mapped["rotate"] = _canonical_rotation(rotate_direction)
+    return mapped
 
 
 def get_file_path(base_dir, state, rotation, transfer_allowed, player_turn):
@@ -229,20 +377,32 @@ def _iter_states_for_completion(grid_size, completion):
             yield np.asarray(state_values, dtype=int).reshape((grid_size, grid_size))
 
 
-def create_game_tablebase(base_dir="game_tablebase", grid_size=2, show_progress=True, workers=None):
-    """Solve every board state for an n x n grid and all rule combinations."""
+def create_game_tablebase(
+    base_dir=None,
+    grid_size=2,
+    show_progress=True,
+    workers=None,
+    tablebase_type="compressed",
+):
+    """Solve every board state for an n x n grid and selected tablebase type."""
+    tablebase_type = normalise_tablebase_type(tablebase_type)
+    if base_dir is None:
+        base_dir = default_base_dir(tablebase_type)
     grid_size = int(grid_size)
     if grid_size < 1:
         raise ValueError("grid_size must be positive")
     if workers is not None:
         workers = int(workers)
 
+    compressed = tablebase_type == "compressed"
+    rotation_directions = COMPRESSED_ROTATION_DIRECTIONS if compressed else ROTATION_DIRECTIONS
+    player_turns = COMPRESSED_PLAYER_TURNS if compressed else PLAYER_TURNS
     state_count = 3 ** (grid_size * grid_size)
-    context_count = len(ROTATION_DIRECTIONS) * len(TRANSFER_RULES) * len(PLAYER_TURNS)
+    context_count = len(rotation_directions) * len(TRANSFER_RULES) * len(player_turns)
     total_positions = state_count * context_count
     progress = _make_progress(
         total_positions,
-        f"{grid_size}x{grid_size} tablebase",
+        f"{grid_size}x{grid_size} {tablebase_type} tablebase",
         show_progress,
     )
     position_ids = set()
@@ -250,10 +410,25 @@ def create_game_tablebase(base_dir="game_tablebase", grid_size=2, show_progress=
 
     try:
         for completion in range(grid_size * grid_size, -1, -1):
-            for rotation in ROTATION_DIRECTIONS:
+            for rotation in rotation_directions:
                 for transfer_allowed in TRANSFER_RULES:
-                    for player_turn in PLAYER_TURNS:
-                        states = list(_iter_states_for_completion(grid_size, completion))
+                    for player_turn in player_turns:
+                        all_states = list(_iter_states_for_completion(grid_size, completion))
+                        if compressed:
+                            states = [
+                                state
+                                for state in all_states
+                                if np.array_equal(
+                                    canonicalize_state(state, rotation)[0],
+                                    state,
+                                )
+                            ]
+                        else:
+                            states = all_states
+                        if compressed and progress is not None:
+                            progress.update(len(all_states))
+                        if not states:
+                            continue
                         file_path = get_file_path(
                             base_dir,
                             states[0],
@@ -287,8 +462,10 @@ def create_game_tablebase(base_dir="game_tablebase", grid_size=2, show_progress=
                                 raise RuntimeError(f"Duplicate position ID: {record['id']}")
                             position_ids.add(record["id"])
                             records.append(record)
-                            if progress is not None:
-                                progress.update()
+                        if not compressed:
+                            for _ in records:
+                                if progress is not None:
+                                    progress.update()
                         _write_records(file_path, records)
                         files_written += 1
     finally:
@@ -302,14 +479,37 @@ def create_game_tablebase(base_dir="game_tablebase", grid_size=2, show_progress=
     }
 
 
-def generate_tablebase(base_dir="game_tablebase", grid_size=2, show_progress=True, workers=None):
+def generate_tablebase(
+    base_dir=None,
+    grid_size=2,
+    show_progress=True,
+    workers=None,
+    tablebase_type="compressed",
+):
     """Backward-compatible alias for create_game_tablebase."""
-    return create_game_tablebase(base_dir, grid_size, show_progress, workers=workers)
+    return create_game_tablebase(
+        base_dir,
+        grid_size,
+        show_progress,
+        workers=workers,
+        tablebase_type=tablebase_type,
+    )
 
 
-def solve_all_2x2_positions(base_dir="game_tablebase", show_progress=True):
-    """Solve all 81 possible 2x2 boards for all 12 rule combinations."""
-    return create_game_tablebase(base_dir, grid_size=2, show_progress=show_progress)
+def solve_all_2x2_positions(
+    base_dir=None,
+    show_progress=True,
+    workers=None,
+    tablebase_type="compressed",
+):
+    """Solve the 2x2 tablebase for the selected tablebase type."""
+    return create_game_tablebase(
+        base_dir,
+        grid_size=2,
+        show_progress=show_progress,
+        workers=workers,
+        tablebase_type=tablebase_type,
+    )
 
 
 def main(argv=None):
@@ -322,9 +522,18 @@ def main(argv=None):
         help="size of the square grid (default: 2)",
     )
     parser.add_argument(
+        "--tablebase",
+        "--tablebase-type",
+        "--tablebase_type",
+        dest="tablebase_type",
+        choices=TABLEBASE_TYPES,
+        default="compressed",
+        help="tablebase to produce (default: compressed)",
+    )
+    parser.add_argument(
         "--base-dir",
-        default="game_tablebase",
-        help="directory in which to save the tablebase (default: game_tablebase)",
+        default=None,
+        help="directory in which to save the tablebase (default: selected tablebase directory)",
     )
     parser.add_argument(
         "--no-progress",
@@ -346,6 +555,7 @@ def main(argv=None):
         grid_size=args.grid_size,
         show_progress=not args.no_progress,
         workers=args.workers,
+        tablebase_type=args.tablebase_type,
     )
     print(
         f"Saved {result['positions']} positions to {result['files']} JSON files "

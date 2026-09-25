@@ -1,0 +1,4530 @@
+[
+  {
+    "id": "3x3_001000100_still_transfer_not_allowed_player1",
+    "position": [
+      [
+        0,
+        0,
+        1
+      ],
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        1,
+        0,
+        0
+      ]
+    ],
+    "solution": {
+      "score": 999,
+      "game_result": "player1_wins",
+      "best_move": {
+        "player": 1,
+        "transfer": null,
+        "add": [
+          1,
+          1
+        ],
+        "rotate": "still"
+      },
+      "moves_sequence": [
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            1,
+            1
+          ],
+          "rotate": "still"
+        }
+      ],
+      "states_sequence": [
+        [
+          [
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            0
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "3x3_001000200_still_transfer_not_allowed_player1",
+    "position": [
+      [
+        0,
+        0,
+        1
+      ],
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        2,
+        0,
+        0
+      ]
+    ],
+    "solution": {
+      "score": 995,
+      "game_result": "player1_wins",
+      "best_move": {
+        "player": 1,
+        "transfer": null,
+        "add": [
+          0,
+          0
+        ],
+        "rotate": "still"
+      },
+      "moves_sequence": [
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            0
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            0,
+            1
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            2,
+            2
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            1,
+            1
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            1,
+            2
+          ],
+          "rotate": "still"
+        }
+      ],
+      "states_sequence": [
+        [
+          [
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            2,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            0,
+            1
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            2,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            2,
+            1
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            2,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            2,
+            1
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            2,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            1,
+            2,
+            1
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            2,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            1,
+            2,
+            1
+          ],
+          [
+            0,
+            2,
+            1
+          ],
+          [
+            2,
+            0,
+            1
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "3x3_002000200_still_transfer_not_allowed_player1",
+    "position": [
+      [
+        0,
+        0,
+        2
+      ],
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        2,
+        0,
+        0
+      ]
+    ],
+    "solution": {
+      "score": -996,
+      "game_result": "player2_wins",
+      "best_move": {
+        "player": 1,
+        "transfer": null,
+        "add": [
+          1,
+          1
+        ],
+        "rotate": "still"
+      },
+      "moves_sequence": [
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            1,
+            1
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            0,
+            0
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            1
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            1,
+            0
+          ],
+          "rotate": "still"
+        }
+      ],
+      "states_sequence": [
+        [
+          [
+            0,
+            0,
+            2
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            2,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            0,
+            0,
+            2
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            2,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            2,
+            0,
+            2
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            2,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            2,
+            1,
+            2
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            2,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            2,
+            1,
+            2
+          ],
+          [
+            2,
+            1,
+            0
+          ],
+          [
+            2,
+            0,
+            0
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "3x3_000101000_still_transfer_not_allowed_player1",
+    "position": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        1,
+        0,
+        1
+      ],
+      [
+        0,
+        0,
+        0
+      ]
+    ],
+    "solution": {
+      "score": 999,
+      "game_result": "player1_wins",
+      "best_move": {
+        "player": 1,
+        "transfer": null,
+        "add": [
+          1,
+          1
+        ],
+        "rotate": "still"
+      },
+      "moves_sequence": [
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            1,
+            1
+          ],
+          "rotate": "still"
+        }
+      ],
+      "states_sequence": [
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            1
+          ],
+          [
+            0,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            1,
+            1,
+            1
+          ],
+          [
+            0,
+            0,
+            0
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "3x3_000102000_still_transfer_not_allowed_player1",
+    "position": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        1,
+        0,
+        2
+      ],
+      [
+        0,
+        0,
+        0
+      ]
+    ],
+    "solution": {
+      "score": 0,
+      "game_result": "draw",
+      "best_move": {
+        "player": 1,
+        "transfer": null,
+        "add": [
+          0,
+          0
+        ],
+        "rotate": "still"
+      },
+      "moves_sequence": [
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            0
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            2,
+            0
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            2
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            0,
+            1
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            1,
+            1
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            2,
+            2
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            2,
+            1
+          ],
+          "rotate": "still"
+        }
+      ],
+      "states_sequence": [
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            2
+          ],
+          [
+            0,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            2
+          ],
+          [
+            0,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            2
+          ],
+          [
+            2,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            0,
+            1
+          ],
+          [
+            1,
+            0,
+            2
+          ],
+          [
+            2,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            2,
+            1
+          ],
+          [
+            1,
+            0,
+            2
+          ],
+          [
+            2,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            2,
+            1
+          ],
+          [
+            1,
+            1,
+            2
+          ],
+          [
+            2,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            2,
+            1
+          ],
+          [
+            1,
+            1,
+            2
+          ],
+          [
+            2,
+            0,
+            2
+          ]
+        ],
+        [
+          [
+            1,
+            2,
+            1
+          ],
+          [
+            1,
+            1,
+            2
+          ],
+          [
+            2,
+            1,
+            2
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "3x3_000202000_still_transfer_not_allowed_player1",
+    "position": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        2,
+        0,
+        2
+      ],
+      [
+        0,
+        0,
+        0
+      ]
+    ],
+    "solution": {
+      "score": -994,
+      "game_result": "player2_wins",
+      "best_move": {
+        "player": 1,
+        "transfer": null,
+        "add": [
+          1,
+          1
+        ],
+        "rotate": "still"
+      },
+      "moves_sequence": [
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            1,
+            1
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            0,
+            0
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            2,
+            0
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            0,
+            2
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            2,
+            1
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            0,
+            1
+          ],
+          "rotate": "still"
+        }
+      ],
+      "states_sequence": [
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            2,
+            0,
+            2
+          ],
+          [
+            0,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            2,
+            1,
+            2
+          ],
+          [
+            0,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            2,
+            0,
+            0
+          ],
+          [
+            2,
+            1,
+            2
+          ],
+          [
+            0,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            2,
+            0,
+            0
+          ],
+          [
+            2,
+            1,
+            2
+          ],
+          [
+            1,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            2,
+            0,
+            2
+          ],
+          [
+            2,
+            1,
+            2
+          ],
+          [
+            1,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            2,
+            0,
+            2
+          ],
+          [
+            2,
+            1,
+            2
+          ],
+          [
+            1,
+            1,
+            0
+          ]
+        ],
+        [
+          [
+            2,
+            2,
+            2
+          ],
+          [
+            2,
+            1,
+            2
+          ],
+          [
+            1,
+            1,
+            0
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "3x3_000010010_still_transfer_not_allowed_player1",
+    "position": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        1,
+        0
+      ],
+      [
+        0,
+        1,
+        0
+      ]
+    ],
+    "solution": {
+      "score": 999,
+      "game_result": "player1_wins",
+      "best_move": {
+        "player": 1,
+        "transfer": null,
+        "add": [
+          0,
+          1
+        ],
+        "rotate": "still"
+      },
+      "moves_sequence": [
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            1
+          ],
+          "rotate": "still"
+        }
+      ],
+      "states_sequence": [
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ]
+        ],
+        [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "3x3_000010020_still_transfer_not_allowed_player1",
+    "position": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        1,
+        0
+      ],
+      [
+        0,
+        2,
+        0
+      ]
+    ],
+    "solution": {
+      "score": 995,
+      "game_result": "player1_wins",
+      "best_move": {
+        "player": 1,
+        "transfer": null,
+        "add": [
+          0,
+          0
+        ],
+        "rotate": "still"
+      },
+      "moves_sequence": [
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            0
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            2,
+            2
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            2,
+            0
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            0,
+            2
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            1,
+            0
+          ],
+          "rotate": "still"
+        }
+      ],
+      "states_sequence": [
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            2,
+            2
+          ]
+        ],
+        [
+          [
+            1,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            1,
+            2,
+            2
+          ]
+        ],
+        [
+          [
+            1,
+            0,
+            2
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            1,
+            2,
+            2
+          ]
+        ],
+        [
+          [
+            1,
+            0,
+            2
+          ],
+          [
+            1,
+            1,
+            0
+          ],
+          [
+            1,
+            2,
+            2
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "3x3_000020010_still_transfer_not_allowed_player1",
+    "position": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        2,
+        0
+      ],
+      [
+        0,
+        1,
+        0
+      ]
+    ],
+    "solution": {
+      "score": 0,
+      "game_result": "draw",
+      "best_move": {
+        "player": 1,
+        "transfer": null,
+        "add": [
+          2,
+          0
+        ],
+        "rotate": "still"
+      },
+      "moves_sequence": [
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            2,
+            0
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            2,
+            2
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            0
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            1,
+            0
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            1,
+            2
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            0,
+            1
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            2
+          ],
+          "rotate": "still"
+        }
+      ],
+      "states_sequence": [
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ]
+        ],
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            1,
+            1,
+            0
+          ]
+        ],
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            1,
+            1,
+            2
+          ]
+        ],
+        [
+          [
+            1,
+            0,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            1,
+            1,
+            2
+          ]
+        ],
+        [
+          [
+            1,
+            0,
+            0
+          ],
+          [
+            2,
+            2,
+            0
+          ],
+          [
+            1,
+            1,
+            2
+          ]
+        ],
+        [
+          [
+            1,
+            0,
+            0
+          ],
+          [
+            2,
+            2,
+            1
+          ],
+          [
+            1,
+            1,
+            2
+          ]
+        ],
+        [
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            2,
+            2,
+            1
+          ],
+          [
+            1,
+            1,
+            2
+          ]
+        ],
+        [
+          [
+            1,
+            2,
+            1
+          ],
+          [
+            2,
+            2,
+            1
+          ],
+          [
+            1,
+            1,
+            2
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "3x3_000020020_still_transfer_not_allowed_player1",
+    "position": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        2,
+        0
+      ],
+      [
+        0,
+        2,
+        0
+      ]
+    ],
+    "solution": {
+      "score": -996,
+      "game_result": "player2_wins",
+      "best_move": {
+        "player": 1,
+        "transfer": null,
+        "add": [
+          0,
+          1
+        ],
+        "rotate": "still"
+      },
+      "moves_sequence": [
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            1
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            2,
+            0
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            0
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            0,
+            2
+          ],
+          "rotate": "still"
+        }
+      ],
+      "states_sequence": [
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ]
+        ],
+        [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ]
+        ],
+        [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            2,
+            2,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            1,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            2,
+            2,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            1,
+            2
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            2,
+            2,
+            0
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "3x3_000010001_still_transfer_not_allowed_player1",
+    "position": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        1,
+        0
+      ],
+      [
+        0,
+        0,
+        1
+      ]
+    ],
+    "solution": {
+      "score": 999,
+      "game_result": "player1_wins",
+      "best_move": {
+        "player": 1,
+        "transfer": null,
+        "add": [
+          0,
+          0
+        ],
+        "rotate": "still"
+      },
+      "moves_sequence": [
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            0
+          ],
+          "rotate": "still"
+        }
+      ],
+      "states_sequence": [
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            1,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            0,
+            1
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "3x3_000010002_still_transfer_not_allowed_player1",
+    "position": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        1,
+        0
+      ],
+      [
+        0,
+        0,
+        2
+      ]
+    ],
+    "solution": {
+      "score": 0,
+      "game_result": "draw",
+      "best_move": {
+        "player": 1,
+        "transfer": null,
+        "add": [
+          0,
+          1
+        ],
+        "rotate": "still"
+      },
+      "moves_sequence": [
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            1
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            2,
+            1
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            2,
+            0
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            0,
+            2
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            1,
+            2
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            1,
+            0
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            0
+          ],
+          "rotate": "still"
+        }
+      ],
+      "states_sequence": [
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            0,
+            2
+          ]
+        ],
+        [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            0,
+            2
+          ]
+        ],
+        [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            2,
+            2
+          ]
+        ],
+        [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            1,
+            2,
+            2
+          ]
+        ],
+        [
+          [
+            0,
+            1,
+            2
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            1,
+            2,
+            2
+          ]
+        ],
+        [
+          [
+            0,
+            1,
+            2
+          ],
+          [
+            0,
+            1,
+            1
+          ],
+          [
+            1,
+            2,
+            2
+          ]
+        ],
+        [
+          [
+            0,
+            1,
+            2
+          ],
+          [
+            2,
+            1,
+            1
+          ],
+          [
+            1,
+            2,
+            2
+          ]
+        ],
+        [
+          [
+            1,
+            1,
+            2
+          ],
+          [
+            2,
+            1,
+            1
+          ],
+          [
+            1,
+            2,
+            2
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "3x3_000020001_still_transfer_not_allowed_player1",
+    "position": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        2,
+        0
+      ],
+      [
+        0,
+        0,
+        1
+      ]
+    ],
+    "solution": {
+      "score": 0,
+      "game_result": "draw",
+      "best_move": {
+        "player": 1,
+        "transfer": null,
+        "add": [
+          0,
+          2
+        ],
+        "rotate": "still"
+      },
+      "moves_sequence": [
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            2
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            1,
+            2
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            1,
+            0
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            0,
+            1
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            2,
+            1
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            2,
+            0
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            0
+          ],
+          "rotate": "still"
+        }
+      ],
+      "states_sequence": [
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            2,
+            2
+          ],
+          [
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0,
+            0,
+            1
+          ],
+          [
+            1,
+            2,
+            2
+          ],
+          [
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0,
+            2,
+            1
+          ],
+          [
+            1,
+            2,
+            2
+          ],
+          [
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0,
+            2,
+            1
+          ],
+          [
+            1,
+            2,
+            2
+          ],
+          [
+            0,
+            1,
+            1
+          ]
+        ],
+        [
+          [
+            0,
+            2,
+            1
+          ],
+          [
+            1,
+            2,
+            2
+          ],
+          [
+            2,
+            1,
+            1
+          ]
+        ],
+        [
+          [
+            1,
+            2,
+            1
+          ],
+          [
+            1,
+            2,
+            2
+          ],
+          [
+            2,
+            1,
+            1
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "3x3_000020002_still_transfer_not_allowed_player1",
+    "position": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        2,
+        0
+      ],
+      [
+        0,
+        0,
+        2
+      ]
+    ],
+    "solution": {
+      "score": -996,
+      "game_result": "player2_wins",
+      "best_move": {
+        "player": 1,
+        "transfer": null,
+        "add": [
+          0,
+          0
+        ],
+        "rotate": "still"
+      },
+      "moves_sequence": [
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            0
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            0,
+            2
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            1,
+            0
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            1,
+            2
+          ],
+          "rotate": "still"
+        }
+      ],
+      "states_sequence": [
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            0,
+            2
+          ]
+        ],
+        [
+          [
+            1,
+            0,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            0,
+            2
+          ]
+        ],
+        [
+          [
+            1,
+            0,
+            2
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            0,
+            2
+          ]
+        ],
+        [
+          [
+            1,
+            0,
+            2
+          ],
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            0,
+            0,
+            2
+          ]
+        ],
+        [
+          [
+            1,
+            0,
+            2
+          ],
+          [
+            1,
+            2,
+            2
+          ],
+          [
+            0,
+            0,
+            2
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "3x3_000001100_still_transfer_not_allowed_player1",
+    "position": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        1
+      ],
+      [
+        1,
+        0,
+        0
+      ]
+    ],
+    "solution": {
+      "score": 997,
+      "game_result": "player1_wins",
+      "best_move": {
+        "player": 1,
+        "transfer": null,
+        "add": [
+          0,
+          2
+        ],
+        "rotate": "still"
+      },
+      "moves_sequence": [
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            2
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            0,
+            0
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            1,
+            1
+          ],
+          "rotate": "still"
+        }
+      ],
+      "states_sequence": [
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            1
+          ],
+          [
+            1,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            0,
+            1
+          ],
+          [
+            1,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            2,
+            0,
+            1
+          ],
+          [
+            0,
+            0,
+            1
+          ],
+          [
+            1,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            2,
+            0,
+            1
+          ],
+          [
+            0,
+            1,
+            1
+          ],
+          [
+            1,
+            0,
+            0
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "3x3_000001200_still_transfer_not_allowed_player1",
+    "position": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        1
+      ],
+      [
+        2,
+        0,
+        0
+      ]
+    ],
+    "solution": {
+      "score": 995,
+      "game_result": "player1_wins",
+      "best_move": {
+        "player": 1,
+        "transfer": null,
+        "add": [
+          2,
+          2
+        ],
+        "rotate": "still"
+      },
+      "moves_sequence": [
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            2,
+            2
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            0,
+            2
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            1,
+            1
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            0,
+            0
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            1,
+            0
+          ],
+          "rotate": "still"
+        }
+      ],
+      "states_sequence": [
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            1
+          ],
+          [
+            2,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            1
+          ],
+          [
+            2,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0,
+            0,
+            2
+          ],
+          [
+            0,
+            0,
+            1
+          ],
+          [
+            2,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0,
+            0,
+            2
+          ],
+          [
+            0,
+            1,
+            1
+          ],
+          [
+            2,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            2,
+            0,
+            2
+          ],
+          [
+            0,
+            1,
+            1
+          ],
+          [
+            2,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            2,
+            0,
+            2
+          ],
+          [
+            1,
+            1,
+            1
+          ],
+          [
+            2,
+            0,
+            1
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "3x3_000002100_still_transfer_not_allowed_player1",
+    "position": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        2
+      ],
+      [
+        1,
+        0,
+        0
+      ]
+    ],
+    "solution": {
+      "score": 995,
+      "game_result": "player1_wins",
+      "best_move": {
+        "player": 1,
+        "transfer": null,
+        "add": [
+          0,
+          0
+        ],
+        "rotate": "still"
+      },
+      "moves_sequence": [
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            0
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            1,
+            0
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            1,
+            1
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            0,
+            2
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            2,
+            2
+          ],
+          "rotate": "still"
+        }
+      ],
+      "states_sequence": [
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            2
+          ],
+          [
+            1,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            2
+          ],
+          [
+            1,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            0,
+            0
+          ],
+          [
+            2,
+            0,
+            2
+          ],
+          [
+            1,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            0,
+            0
+          ],
+          [
+            2,
+            1,
+            2
+          ],
+          [
+            1,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            0,
+            2
+          ],
+          [
+            2,
+            1,
+            2
+          ],
+          [
+            1,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            0,
+            2
+          ],
+          [
+            2,
+            1,
+            2
+          ],
+          [
+            1,
+            0,
+            1
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "3x3_000002200_still_transfer_not_allowed_player1",
+    "position": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        2
+      ],
+      [
+        2,
+        0,
+        0
+      ]
+    ],
+    "solution": {
+      "score": -996,
+      "game_result": "player2_wins",
+      "best_move": {
+        "player": 1,
+        "transfer": null,
+        "add": [
+          0,
+          0
+        ],
+        "rotate": "still"
+      },
+      "moves_sequence": [
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            0
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            0,
+            2
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            1,
+            1
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            2,
+            2
+          ],
+          "rotate": "still"
+        }
+      ],
+      "states_sequence": [
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            2
+          ],
+          [
+            2,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            2
+          ],
+          [
+            2,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            0,
+            2
+          ],
+          [
+            0,
+            0,
+            2
+          ],
+          [
+            2,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            0,
+            2
+          ],
+          [
+            0,
+            1,
+            2
+          ],
+          [
+            2,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            0,
+            2
+          ],
+          [
+            0,
+            1,
+            2
+          ],
+          [
+            2,
+            0,
+            2
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "3x3_000001010_still_transfer_not_allowed_player1",
+    "position": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        1
+      ],
+      [
+        0,
+        1,
+        0
+      ]
+    ],
+    "solution": {
+      "score": 997,
+      "game_result": "player1_wins",
+      "best_move": {
+        "player": 1,
+        "transfer": null,
+        "add": [
+          1,
+          1
+        ],
+        "rotate": "still"
+      },
+      "moves_sequence": [
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            1,
+            1
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            0,
+            0
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            1
+          ],
+          "rotate": "still"
+        }
+      ],
+      "states_sequence": [
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            1,
+            0
+          ]
+        ],
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            1
+          ],
+          [
+            0,
+            1,
+            0
+          ]
+        ],
+        [
+          [
+            2,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            1
+          ],
+          [
+            0,
+            1,
+            0
+          ]
+        ],
+        [
+          [
+            2,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            1
+          ],
+          [
+            0,
+            1,
+            0
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "3x3_000001020_still_transfer_not_allowed_player1",
+    "position": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        1
+      ],
+      [
+        0,
+        2,
+        0
+      ]
+    ],
+    "solution": {
+      "score": 995,
+      "game_result": "player1_wins",
+      "best_move": {
+        "player": 1,
+        "transfer": null,
+        "add": [
+          1,
+          1
+        ],
+        "rotate": "still"
+      },
+      "moves_sequence": [
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            1,
+            1
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            1,
+            0
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            2
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            2,
+            0
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            2,
+            2
+          ],
+          "rotate": "still"
+        }
+      ],
+      "states_sequence": [
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            2,
+            0
+          ]
+        ],
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            1
+          ],
+          [
+            0,
+            2,
+            0
+          ]
+        ],
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            2,
+            1,
+            1
+          ],
+          [
+            0,
+            2,
+            0
+          ]
+        ],
+        [
+          [
+            0,
+            0,
+            1
+          ],
+          [
+            2,
+            1,
+            1
+          ],
+          [
+            0,
+            2,
+            0
+          ]
+        ],
+        [
+          [
+            0,
+            0,
+            1
+          ],
+          [
+            2,
+            1,
+            1
+          ],
+          [
+            2,
+            2,
+            0
+          ]
+        ],
+        [
+          [
+            0,
+            0,
+            1
+          ],
+          [
+            2,
+            1,
+            1
+          ],
+          [
+            2,
+            2,
+            1
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "3x3_000002020_still_transfer_not_allowed_player1",
+    "position": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        2
+      ],
+      [
+        0,
+        2,
+        0
+      ]
+    ],
+    "solution": {
+      "score": -996,
+      "game_result": "player2_wins",
+      "best_move": {
+        "player": 1,
+        "transfer": null,
+        "add": [
+          0,
+          0
+        ],
+        "rotate": "still"
+      },
+      "moves_sequence": [
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            0
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            1,
+            1
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            1
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            1,
+            0
+          ],
+          "rotate": "still"
+        }
+      ],
+      "states_sequence": [
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            2
+          ],
+          [
+            0,
+            2,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            2
+          ],
+          [
+            0,
+            2,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            0,
+            0
+          ],
+          [
+            0,
+            2,
+            2
+          ],
+          [
+            0,
+            2,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            1,
+            0
+          ],
+          [
+            0,
+            2,
+            2
+          ],
+          [
+            0,
+            2,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            1,
+            0
+          ],
+          [
+            2,
+            2,
+            2
+          ],
+          [
+            0,
+            2,
+            0
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "3x3_000000101_still_transfer_not_allowed_player1",
+    "position": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        1,
+        0,
+        1
+      ]
+    ],
+    "solution": {
+      "score": 999,
+      "game_result": "player1_wins",
+      "best_move": {
+        "player": 1,
+        "transfer": null,
+        "add": [
+          2,
+          1
+        ],
+        "rotate": "still"
+      },
+      "moves_sequence": [
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            2,
+            1
+          ],
+          "rotate": "still"
+        }
+      ],
+      "states_sequence": [
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            1,
+            1,
+            1
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "3x3_000000102_still_transfer_not_allowed_player1",
+    "position": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        1,
+        0,
+        2
+      ]
+    ],
+    "solution": {
+      "score": 995,
+      "game_result": "player1_wins",
+      "best_move": {
+        "player": 1,
+        "transfer": null,
+        "add": [
+          0,
+          0
+        ],
+        "rotate": "still"
+      },
+      "moves_sequence": [
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            0
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            1,
+            0
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            2
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            1,
+            1
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            1
+          ],
+          "rotate": "still"
+        }
+      ],
+      "states_sequence": [
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            2
+          ]
+        ],
+        [
+          [
+            1,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            2
+          ]
+        ],
+        [
+          [
+            1,
+            0,
+            0
+          ],
+          [
+            2,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            2
+          ]
+        ],
+        [
+          [
+            1,
+            0,
+            1
+          ],
+          [
+            2,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            2
+          ]
+        ],
+        [
+          [
+            1,
+            0,
+            1
+          ],
+          [
+            2,
+            2,
+            0
+          ],
+          [
+            1,
+            0,
+            2
+          ]
+        ],
+        [
+          [
+            1,
+            1,
+            1
+          ],
+          [
+            2,
+            2,
+            0
+          ],
+          [
+            1,
+            0,
+            2
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "3x3_000000202_still_transfer_not_allowed_player1",
+    "position": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        2,
+        0,
+        2
+      ]
+    ],
+    "solution": {
+      "score": -996,
+      "game_result": "player2_wins",
+      "best_move": {
+        "player": 1,
+        "transfer": null,
+        "add": [
+          2,
+          1
+        ],
+        "rotate": "still"
+      },
+      "moves_sequence": [
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            2,
+            1
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            0,
+            0
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            1
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            1,
+            0
+          ],
+          "rotate": "still"
+        }
+      ],
+      "states_sequence": [
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            2,
+            0,
+            2
+          ]
+        ],
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            2,
+            1,
+            2
+          ]
+        ],
+        [
+          [
+            2,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            2,
+            1,
+            2
+          ]
+        ],
+        [
+          [
+            2,
+            1,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            2,
+            1,
+            2
+          ]
+        ],
+        [
+          [
+            2,
+            1,
+            0
+          ],
+          [
+            2,
+            0,
+            0
+          ],
+          [
+            2,
+            1,
+            2
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "3x3_000000011_still_transfer_not_allowed_player1",
+    "position": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        1,
+        1
+      ]
+    ],
+    "solution": {
+      "score": 999,
+      "game_result": "player1_wins",
+      "best_move": {
+        "player": 1,
+        "transfer": null,
+        "add": [
+          2,
+          0
+        ],
+        "rotate": "still"
+      },
+      "moves_sequence": [
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            2,
+            0
+          ],
+          "rotate": "still"
+        }
+      ],
+      "states_sequence": [
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            1
+          ]
+        ],
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            1,
+            1,
+            1
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "3x3_000000012_still_transfer_not_allowed_player1",
+    "position": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        1,
+        2
+      ]
+    ],
+    "solution": {
+      "score": 0,
+      "game_result": "draw",
+      "best_move": {
+        "player": 1,
+        "transfer": null,
+        "add": [
+          1,
+          1
+        ],
+        "rotate": "still"
+      },
+      "moves_sequence": [
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            1,
+            1
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            0,
+            1
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            2
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            2,
+            0
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            1,
+            0
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            1,
+            2
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            0
+          ],
+          "rotate": "still"
+        }
+      ],
+      "states_sequence": [
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            2
+          ]
+        ],
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            2
+          ]
+        ],
+        [
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            2
+          ]
+        ],
+        [
+          [
+            0,
+            2,
+            1
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            2
+          ]
+        ],
+        [
+          [
+            0,
+            2,
+            1
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            2,
+            1,
+            2
+          ]
+        ],
+        [
+          [
+            0,
+            2,
+            1
+          ],
+          [
+            1,
+            1,
+            0
+          ],
+          [
+            2,
+            1,
+            2
+          ]
+        ],
+        [
+          [
+            0,
+            2,
+            1
+          ],
+          [
+            1,
+            1,
+            2
+          ],
+          [
+            2,
+            1,
+            2
+          ]
+        ],
+        [
+          [
+            1,
+            2,
+            1
+          ],
+          [
+            1,
+            1,
+            2
+          ],
+          [
+            2,
+            1,
+            2
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "3x3_000000021_still_transfer_not_allowed_player1",
+    "position": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        2,
+        1
+      ]
+    ],
+    "solution": {
+      "score": 995,
+      "game_result": "player1_wins",
+      "best_move": {
+        "player": 1,
+        "transfer": null,
+        "add": [
+          0,
+          2
+        ],
+        "rotate": "still"
+      },
+      "moves_sequence": [
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            2
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            1,
+            2
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            0
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            1,
+            1
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            1
+          ],
+          "rotate": "still"
+        }
+      ],
+      "states_sequence": [
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            2,
+            1
+          ]
+        ],
+        [
+          [
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            2,
+            1
+          ]
+        ],
+        [
+          [
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            0,
+            2
+          ],
+          [
+            0,
+            2,
+            1
+          ]
+        ],
+        [
+          [
+            1,
+            0,
+            1
+          ],
+          [
+            0,
+            0,
+            2
+          ],
+          [
+            0,
+            2,
+            1
+          ]
+        ],
+        [
+          [
+            1,
+            0,
+            1
+          ],
+          [
+            0,
+            2,
+            2
+          ],
+          [
+            0,
+            2,
+            1
+          ]
+        ],
+        [
+          [
+            1,
+            1,
+            1
+          ],
+          [
+            0,
+            2,
+            2
+          ],
+          [
+            0,
+            2,
+            1
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "3x3_000000022_still_transfer_not_allowed_player1",
+    "position": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        2,
+        2
+      ]
+    ],
+    "solution": {
+      "score": -996,
+      "game_result": "player2_wins",
+      "best_move": {
+        "player": 1,
+        "transfer": null,
+        "add": [
+          2,
+          0
+        ],
+        "rotate": "still"
+      },
+      "moves_sequence": [
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            2,
+            0
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            1,
+            1
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            0
+          ],
+          "rotate": "still"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            0,
+            1
+          ],
+          "rotate": "still"
+        }
+      ],
+      "states_sequence": [
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            2,
+            2
+          ]
+        ],
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            1,
+            2,
+            2
+          ]
+        ],
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            1,
+            2,
+            2
+          ]
+        ],
+        [
+          [
+            1,
+            0,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            1,
+            2,
+            2
+          ]
+        ],
+        [
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            1,
+            2,
+            2
+          ]
+        ]
+      ]
+    }
+  }
+]
