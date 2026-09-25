@@ -1,14 +1,151 @@
 [
   {
-    "id": "2x2_0001_counterclockwise_transfer_allowed_player2",
+    "id": "2x2_1000_counterclockwise_transfer_allowed_player2",
     "position": [
       [
-        0,
+        1,
         0
       ],
       [
         0,
+        0
+      ]
+    ],
+    "solution": {
+      "score": -998,
+      "game_result": "player1_wins",
+      "best_move": {
+        "player": 2,
+        "transfer": null,
+        "add": [
+          0,
+          1
+        ],
+        "rotate": "counterclockwise"
+      },
+      "moves_sequence": [
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            0,
+            1
+          ],
+          "rotate": "counterclockwise"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            1
+          ],
+          "rotate": "counterclockwise"
+        }
+      ],
+      "states_sequence": [
+        [
+          [
+            1,
+            0
+          ],
+          [
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            2,
+            0
+          ],
+          [
+            1,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            0
+          ],
+          [
+            2,
+            1
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "2x2_2000_counterclockwise_transfer_allowed_player2",
+    "position": [
+      [
+        2,
+        0
+      ],
+      [
+        0,
+        0
+      ]
+    ],
+    "solution": {
+      "score": 999,
+      "game_result": "player2_wins",
+      "best_move": {
+        "player": 2,
+        "transfer": null,
+        "add": [
+          0,
+          1
+        ],
+        "rotate": "counterclockwise"
+      },
+      "moves_sequence": [
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            0,
+            1
+          ],
+          "rotate": "counterclockwise"
+        }
+      ],
+      "states_sequence": [
+        [
+          [
+            2,
+            0
+          ],
+          [
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            2,
+            0
+          ],
+          [
+            2,
+            0
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "2x2_0100_counterclockwise_transfer_allowed_player2",
+    "position": [
+      [
+        0,
         1
+      ],
+      [
+        0,
+        0
       ]
     ],
     "solution": {
@@ -38,7 +175,7 @@
           "transfer": null,
           "add": [
             0,
-            0
+            1
           ],
           "rotate": "counterclockwise"
         }
@@ -47,17 +184,17 @@
         [
           [
             0,
-            0
+            1
           ],
           [
             0,
-            1
+            0
           ]
         ],
         [
           [
-            0,
-            1
+            1,
+            0
           ],
           [
             2,
@@ -78,15 +215,15 @@
     }
   },
   {
-    "id": "2x2_0002_counterclockwise_transfer_allowed_player2",
+    "id": "2x2_0200_counterclockwise_transfer_allowed_player2",
     "position": [
       [
         0,
-        0
+        2
       ],
       [
         0,
-        2
+        0
       ]
     ],
     "solution": {
@@ -116,17 +253,17 @@
         [
           [
             0,
-            0
+            2
           ],
           [
             0,
-            2
+            0
           ]
         ],
         [
           [
-            0,
-            2
+            2,
+            0
           ],
           [
             2,
@@ -274,15 +411,15 @@
     }
   },
   {
-    "id": "2x2_0100_counterclockwise_transfer_allowed_player2",
+    "id": "2x2_0001_counterclockwise_transfer_allowed_player2",
     "position": [
+      [
+        0,
+        0
+      ],
       [
         0,
         1
-      ],
-      [
-        0,
-        0
       ]
     ],
     "solution": {
@@ -312,7 +449,7 @@
           "transfer": null,
           "add": [
             0,
-            1
+            0
           ],
           "rotate": "counterclockwise"
         }
@@ -321,17 +458,17 @@
         [
           [
             0,
-            1
+            0
           ],
           [
             0,
-            0
+            1
           ]
         ],
         [
           [
-            1,
-            0
+            0,
+            1
           ],
           [
             2,
@@ -352,15 +489,15 @@
     }
   },
   {
-    "id": "2x2_0200_counterclockwise_transfer_allowed_player2",
+    "id": "2x2_0002_counterclockwise_transfer_allowed_player2",
     "position": [
+      [
+        0,
+        0
+      ],
       [
         0,
         2
-      ],
-      [
-        0,
-        0
       ]
     ],
     "solution": {
@@ -390,154 +527,17 @@
         [
           [
             0,
+            0
+          ],
+          [
+            0,
             2
-          ],
-          [
-            0,
-            0
           ]
         ],
         [
           [
-            2,
-            0
-          ],
-          [
-            2,
-            0
-          ]
-        ]
-      ]
-    }
-  },
-  {
-    "id": "2x2_1000_counterclockwise_transfer_allowed_player2",
-    "position": [
-      [
-        1,
-        0
-      ],
-      [
-        0,
-        0
-      ]
-    ],
-    "solution": {
-      "score": -998,
-      "game_result": "player1_wins",
-      "best_move": {
-        "player": 2,
-        "transfer": null,
-        "add": [
-          0,
-          1
-        ],
-        "rotate": "counterclockwise"
-      },
-      "moves_sequence": [
-        {
-          "player": 2,
-          "transfer": null,
-          "add": [
             0,
-            1
-          ],
-          "rotate": "counterclockwise"
-        },
-        {
-          "player": 1,
-          "transfer": null,
-          "add": [
-            0,
-            1
-          ],
-          "rotate": "counterclockwise"
-        }
-      ],
-      "states_sequence": [
-        [
-          [
-            1,
-            0
-          ],
-          [
-            0,
-            0
-          ]
-        ],
-        [
-          [
-            2,
-            0
-          ],
-          [
-            1,
-            0
-          ]
-        ],
-        [
-          [
-            1,
-            0
-          ],
-          [
-            2,
-            1
-          ]
-        ]
-      ]
-    }
-  },
-  {
-    "id": "2x2_2000_counterclockwise_transfer_allowed_player2",
-    "position": [
-      [
-        2,
-        0
-      ],
-      [
-        0,
-        0
-      ]
-    ],
-    "solution": {
-      "score": 999,
-      "game_result": "player2_wins",
-      "best_move": {
-        "player": 2,
-        "transfer": null,
-        "add": [
-          0,
-          1
-        ],
-        "rotate": "counterclockwise"
-      },
-      "moves_sequence": [
-        {
-          "player": 2,
-          "transfer": null,
-          "add": [
-            0,
-            1
-          ],
-          "rotate": "counterclockwise"
-        }
-      ],
-      "states_sequence": [
-        [
-          [
-            2,
-            0
-          ],
-          [
-            0,
-            0
-          ]
-        ],
-        [
-          [
-            2,
-            0
+            2
           ],
           [
             2,

@@ -14,7 +14,7 @@ except ImportError:
     tqdm = None
 
 
-ROTATION_DIRECTIONS = ("clockwise", "counterclockwise", "still")
+ROTATION_DIRECTIONS = ("still", "clockwise", "counterclockwise")
 TRANSFER_RULES = (False, True)
 PLAYER_TURNS = (1, 2)
 
@@ -206,6 +206,16 @@ def save_game_record(
     print(f"Record saved to {file_path}")
 
 
+def _iter_states_for_completion(grid_size, completion):
+    cell_count = grid_size * grid_size
+    for occupied in itertools.combinations(range(cell_count), completion):
+        for values in itertools.product((1, 2), repeat=completion):
+            state_values = [0] * cell_count
+            for cell, value in zip(occupied, values):
+                state_values[cell] = value
+            yield np.asarray(state_values, dtype=int).reshape((grid_size, grid_size))
+
+
 def create_game_tablebase(base_dir="game_tablebase", grid_size=2, show_progress=True):
     """Solve every board state for an n x n grid and all rule combinations."""
     grid_size = int(grid_size)
@@ -224,46 +234,45 @@ def create_game_tablebase(base_dir="game_tablebase", grid_size=2, show_progress=
     files_written = 0
 
     try:
-        for rotation in ROTATION_DIRECTIONS:
-            for transfer_allowed in TRANSFER_RULES:
-                for player_turn in PLAYER_TURNS:
-                    records_by_file = {}
-                    file_paths = {}
-                    for values in itertools.product((0, 1, 2), repeat=grid_size * grid_size):
-                        state = np.asarray(values, dtype=int).reshape((grid_size, grid_size))
-                        completion = int(np.count_nonzero(state))
-                        if completion not in file_paths:
-                            file_paths[completion] = get_file_path(
-                                base_dir,
+        for completion in range(grid_size * grid_size, -1, -1):
+            for rotation in ROTATION_DIRECTIONS:
+                for transfer_allowed in TRANSFER_RULES:
+                    for player_turn in PLAYER_TURNS:
+                        records_by_file = {}
+                        file_paths = {}
+                        for state in _iter_states_for_completion(grid_size, completion):
+                            if completion not in file_paths:
+                                file_paths[completion] = get_file_path(
+                                    base_dir,
+                                    state,
+                                    rotation,
+                                    transfer_allowed,
+                                    player_turn,
+                                )
+                            file_path = file_paths[completion]
+                            solution = _solve_position(
                                 state,
                                 rotation,
                                 transfer_allowed,
                                 player_turn,
                             )
-                        file_path = file_paths[completion]
-                        solution = _solve_position(
-                            state,
-                            rotation,
-                            transfer_allowed,
-                            player_turn,
-                        )
-                        record = _make_record(
-                            state,
-                            solution,
-                            rotation,
-                            transfer_allowed,
-                            player_turn,
-                        )
-                        if record["id"] in position_ids:
-                            raise RuntimeError(f"Duplicate position ID: {record['id']}")
-                        position_ids.add(record["id"])
-                        records_by_file.setdefault(file_path, []).append(record)
-                        if progress is not None:
-                            progress.update()
+                            record = _make_record(
+                                state,
+                                solution,
+                                rotation,
+                                transfer_allowed,
+                                player_turn,
+                            )
+                            if record["id"] in position_ids:
+                                raise RuntimeError(f"Duplicate position ID: {record['id']}")
+                            position_ids.add(record["id"])
+                            records_by_file.setdefault(file_path, []).append(record)
+                            if progress is not None:
+                                progress.update()
 
-                    for file_path in sorted(records_by_file):
-                        _write_records(file_path, records_by_file[file_path])
-                        files_written += 1
+                        for file_path in sorted(records_by_file):
+                            _write_records(file_path, records_by_file[file_path])
+                            files_written += 1
     finally:
         if progress is not None:
             progress.close()
