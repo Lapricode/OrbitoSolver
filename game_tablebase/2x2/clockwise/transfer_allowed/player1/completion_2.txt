@@ -1,2 +1,0 @@
-[[ 1, 0],
- [ 0,-1]] | {'player': 1, 'move': (0, 1)} | Player X wins

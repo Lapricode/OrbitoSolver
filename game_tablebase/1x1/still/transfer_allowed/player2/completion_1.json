@@ -1,0 +1,44 @@
+[
+  {
+    "id": "1x1_1_still_transfer_allowed_player2",
+    "position": [
+      [
+        1
+      ]
+    ],
+    "solution": {
+      "score": -1000,
+      "game_result": "player1_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            1
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "1x1_2_still_transfer_allowed_player2",
+    "position": [
+      [
+        2
+      ]
+    ],
+    "solution": {
+      "score": 1000,
+      "game_result": "player2_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            2
+          ]
+        ]
+      ]
+    }
+  }
+]

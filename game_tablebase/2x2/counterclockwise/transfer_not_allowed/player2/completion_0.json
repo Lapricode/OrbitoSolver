@@ -1,0 +1,99 @@
+[
+  {
+    "id": "2x2_0000_counterclockwise_transfer_not_allowed_player2",
+    "position": [
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        0
+      ]
+    ],
+    "solution": {
+      "score": 997,
+      "game_result": "player2_wins",
+      "best_move": {
+        "player": 2,
+        "transfer": null,
+        "add": [
+          0,
+          0
+        ],
+        "rotate": "counterclockwise"
+      },
+      "moves_sequence": [
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            0,
+            0
+          ],
+          "rotate": "counterclockwise"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            0
+          ],
+          "rotate": "counterclockwise"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            0,
+            0
+          ],
+          "rotate": "counterclockwise"
+        }
+      ],
+      "states_sequence": [
+        [
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            0,
+            0
+          ],
+          [
+            2,
+            0
+          ]
+        ],
+        [
+          [
+            0,
+            0
+          ],
+          [
+            1,
+            2
+          ]
+        ],
+        [
+          [
+            0,
+            2
+          ],
+          [
+            2,
+            1
+          ]
+        ]
+      ]
+    }
+  }
+]

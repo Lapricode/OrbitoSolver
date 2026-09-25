@@ -1,0 +1,994 @@
+[
+  {
+    "id": "2x2_0111_still_transfer_not_allowed_player2",
+    "position": [
+      [
+        0,
+        1
+      ],
+      [
+        1,
+        1
+      ]
+    ],
+    "solution": {
+      "score": -1000,
+      "game_result": "player1_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            0,
+            1
+          ],
+          [
+            1,
+            1
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "2x2_0112_still_transfer_not_allowed_player2",
+    "position": [
+      [
+        0,
+        1
+      ],
+      [
+        1,
+        2
+      ]
+    ],
+    "solution": {
+      "score": -1000,
+      "game_result": "player1_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            0,
+            1
+          ],
+          [
+            1,
+            2
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "2x2_0121_still_transfer_not_allowed_player2",
+    "position": [
+      [
+        0,
+        1
+      ],
+      [
+        2,
+        1
+      ]
+    ],
+    "solution": {
+      "score": -1000,
+      "game_result": "player1_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            0,
+            1
+          ],
+          [
+            2,
+            1
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "2x2_0122_still_transfer_not_allowed_player2",
+    "position": [
+      [
+        0,
+        1
+      ],
+      [
+        2,
+        2
+      ]
+    ],
+    "solution": {
+      "score": 1000,
+      "game_result": "player2_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            0,
+            1
+          ],
+          [
+            2,
+            2
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "2x2_0211_still_transfer_not_allowed_player2",
+    "position": [
+      [
+        0,
+        2
+      ],
+      [
+        1,
+        1
+      ]
+    ],
+    "solution": {
+      "score": -1000,
+      "game_result": "player1_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            0,
+            2
+          ],
+          [
+            1,
+            1
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "2x2_0212_still_transfer_not_allowed_player2",
+    "position": [
+      [
+        0,
+        2
+      ],
+      [
+        1,
+        2
+      ]
+    ],
+    "solution": {
+      "score": 1000,
+      "game_result": "player2_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            0,
+            2
+          ],
+          [
+            1,
+            2
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "2x2_0221_still_transfer_not_allowed_player2",
+    "position": [
+      [
+        0,
+        2
+      ],
+      [
+        2,
+        1
+      ]
+    ],
+    "solution": {
+      "score": 1000,
+      "game_result": "player2_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            0,
+            2
+          ],
+          [
+            2,
+            1
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "2x2_0222_still_transfer_not_allowed_player2",
+    "position": [
+      [
+        0,
+        2
+      ],
+      [
+        2,
+        2
+      ]
+    ],
+    "solution": {
+      "score": 1000,
+      "game_result": "player2_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            0,
+            2
+          ],
+          [
+            2,
+            2
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "2x2_1011_still_transfer_not_allowed_player2",
+    "position": [
+      [
+        1,
+        0
+      ],
+      [
+        1,
+        1
+      ]
+    ],
+    "solution": {
+      "score": -1000,
+      "game_result": "player1_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            1,
+            0
+          ],
+          [
+            1,
+            1
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "2x2_1012_still_transfer_not_allowed_player2",
+    "position": [
+      [
+        1,
+        0
+      ],
+      [
+        1,
+        2
+      ]
+    ],
+    "solution": {
+      "score": -1000,
+      "game_result": "player1_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            1,
+            0
+          ],
+          [
+            1,
+            2
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "2x2_1021_still_transfer_not_allowed_player2",
+    "position": [
+      [
+        1,
+        0
+      ],
+      [
+        2,
+        1
+      ]
+    ],
+    "solution": {
+      "score": -1000,
+      "game_result": "player1_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            1,
+            0
+          ],
+          [
+            2,
+            1
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "2x2_1022_still_transfer_not_allowed_player2",
+    "position": [
+      [
+        1,
+        0
+      ],
+      [
+        2,
+        2
+      ]
+    ],
+    "solution": {
+      "score": 1000,
+      "game_result": "player2_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            1,
+            0
+          ],
+          [
+            2,
+            2
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "2x2_1101_still_transfer_not_allowed_player2",
+    "position": [
+      [
+        1,
+        1
+      ],
+      [
+        0,
+        1
+      ]
+    ],
+    "solution": {
+      "score": -1000,
+      "game_result": "player1_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            1,
+            1
+          ],
+          [
+            0,
+            1
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "2x2_1102_still_transfer_not_allowed_player2",
+    "position": [
+      [
+        1,
+        1
+      ],
+      [
+        0,
+        2
+      ]
+    ],
+    "solution": {
+      "score": -1000,
+      "game_result": "player1_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            1,
+            1
+          ],
+          [
+            0,
+            2
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "2x2_1110_still_transfer_not_allowed_player2",
+    "position": [
+      [
+        1,
+        1
+      ],
+      [
+        1,
+        0
+      ]
+    ],
+    "solution": {
+      "score": -1000,
+      "game_result": "player1_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            1,
+            1
+          ],
+          [
+            1,
+            0
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "2x2_1120_still_transfer_not_allowed_player2",
+    "position": [
+      [
+        1,
+        1
+      ],
+      [
+        2,
+        0
+      ]
+    ],
+    "solution": {
+      "score": -1000,
+      "game_result": "player1_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            1,
+            1
+          ],
+          [
+            2,
+            0
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "2x2_1201_still_transfer_not_allowed_player2",
+    "position": [
+      [
+        1,
+        2
+      ],
+      [
+        0,
+        1
+      ]
+    ],
+    "solution": {
+      "score": -1000,
+      "game_result": "player1_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            1,
+            2
+          ],
+          [
+            0,
+            1
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "2x2_1202_still_transfer_not_allowed_player2",
+    "position": [
+      [
+        1,
+        2
+      ],
+      [
+        0,
+        2
+      ]
+    ],
+    "solution": {
+      "score": 1000,
+      "game_result": "player2_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            1,
+            2
+          ],
+          [
+            0,
+            2
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "2x2_1210_still_transfer_not_allowed_player2",
+    "position": [
+      [
+        1,
+        2
+      ],
+      [
+        1,
+        0
+      ]
+    ],
+    "solution": {
+      "score": -1000,
+      "game_result": "player1_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            1,
+            2
+          ],
+          [
+            1,
+            0
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "2x2_1220_still_transfer_not_allowed_player2",
+    "position": [
+      [
+        1,
+        2
+      ],
+      [
+        2,
+        0
+      ]
+    ],
+    "solution": {
+      "score": 1000,
+      "game_result": "player2_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            1,
+            2
+          ],
+          [
+            2,
+            0
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "2x2_2011_still_transfer_not_allowed_player2",
+    "position": [
+      [
+        2,
+        0
+      ],
+      [
+        1,
+        1
+      ]
+    ],
+    "solution": {
+      "score": -1000,
+      "game_result": "player1_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            2,
+            0
+          ],
+          [
+            1,
+            1
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "2x2_2012_still_transfer_not_allowed_player2",
+    "position": [
+      [
+        2,
+        0
+      ],
+      [
+        1,
+        2
+      ]
+    ],
+    "solution": {
+      "score": 1000,
+      "game_result": "player2_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            2,
+            0
+          ],
+          [
+            1,
+            2
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "2x2_2021_still_transfer_not_allowed_player2",
+    "position": [
+      [
+        2,
+        0
+      ],
+      [
+        2,
+        1
+      ]
+    ],
+    "solution": {
+      "score": 1000,
+      "game_result": "player2_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            2,
+            0
+          ],
+          [
+            2,
+            1
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "2x2_2022_still_transfer_not_allowed_player2",
+    "position": [
+      [
+        2,
+        0
+      ],
+      [
+        2,
+        2
+      ]
+    ],
+    "solution": {
+      "score": 1000,
+      "game_result": "player2_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            2,
+            0
+          ],
+          [
+            2,
+            2
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "2x2_2101_still_transfer_not_allowed_player2",
+    "position": [
+      [
+        2,
+        1
+      ],
+      [
+        0,
+        1
+      ]
+    ],
+    "solution": {
+      "score": -1000,
+      "game_result": "player1_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            2,
+            1
+          ],
+          [
+            0,
+            1
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "2x2_2102_still_transfer_not_allowed_player2",
+    "position": [
+      [
+        2,
+        1
+      ],
+      [
+        0,
+        2
+      ]
+    ],
+    "solution": {
+      "score": 1000,
+      "game_result": "player2_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            2,
+            1
+          ],
+          [
+            0,
+            2
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "2x2_2110_still_transfer_not_allowed_player2",
+    "position": [
+      [
+        2,
+        1
+      ],
+      [
+        1,
+        0
+      ]
+    ],
+    "solution": {
+      "score": -1000,
+      "game_result": "player1_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            2,
+            1
+          ],
+          [
+            1,
+            0
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "2x2_2120_still_transfer_not_allowed_player2",
+    "position": [
+      [
+        2,
+        1
+      ],
+      [
+        2,
+        0
+      ]
+    ],
+    "solution": {
+      "score": 1000,
+      "game_result": "player2_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            2,
+            1
+          ],
+          [
+            2,
+            0
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "2x2_2201_still_transfer_not_allowed_player2",
+    "position": [
+      [
+        2,
+        2
+      ],
+      [
+        0,
+        1
+      ]
+    ],
+    "solution": {
+      "score": 1000,
+      "game_result": "player2_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            2,
+            2
+          ],
+          [
+            0,
+            1
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "2x2_2202_still_transfer_not_allowed_player2",
+    "position": [
+      [
+        2,
+        2
+      ],
+      [
+        0,
+        2
+      ]
+    ],
+    "solution": {
+      "score": 1000,
+      "game_result": "player2_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            2,
+            2
+          ],
+          [
+            0,
+            2
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "2x2_2210_still_transfer_not_allowed_player2",
+    "position": [
+      [
+        2,
+        2
+      ],
+      [
+        1,
+        0
+      ]
+    ],
+    "solution": {
+      "score": 1000,
+      "game_result": "player2_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            2,
+            2
+          ],
+          [
+            1,
+            0
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "2x2_2220_still_transfer_not_allowed_player2",
+    "position": [
+      [
+        2,
+        2
+      ],
+      [
+        2,
+        0
+      ]
+    ],
+    "solution": {
+      "score": 1000,
+      "game_result": "player2_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            2,
+            2
+          ],
+          [
+            2,
+            0
+          ]
+        ]
+      ]
+    }
+  }
+]
