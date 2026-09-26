@@ -1,6 +1,7 @@
 import math
 import multiprocessing as mp
 import os
+import random
 import numpy as np
 import time
 
@@ -202,16 +203,60 @@ def _tt_store(tt, key, depth, value, bound, move):
     tt[key] = (depth, value, bound, move)
 
 
+# ---------------------------------------------------------------------------
+# Search clock
+#
+# A deadline can be installed around a search so that it gives up instead of
+# running forever. Only the root loop of an iterative deepening search polls
+# the clock itself, so the check inside the hot recursion is reduced to a
+# single global lookup and a counter increment (the actual clock is read once
+# every _NODE_CHECK_MASK nodes).
+# ---------------------------------------------------------------------------
+
+_SEARCH_DEADLINE = None
+_NODE_COUNT = 0
+_NODE_CHECK_MASK = 2047
+
+
+class _SearchTimeout(Exception):
+    """Raised inside the search when the installed deadline has passed."""
+
+
+def _start_search(deadline):
+    global _SEARCH_DEADLINE, _NODE_COUNT
+    _SEARCH_DEADLINE = deadline
+    _NODE_COUNT = 0
+
+
+def _stop_search():
+    """Uninstall the deadline and return the number of nodes visited."""
+    global _SEARCH_DEADLINE, _NODE_COUNT
+    _SEARCH_DEADLINE = None
+    nodes = _NODE_COUNT
+    _NODE_COUNT = 0
+    return nodes
+
+
+def _tick_clock():
+    global _NODE_COUNT
+    _NODE_COUNT += 1
+    if not (_NODE_COUNT & _NODE_CHECK_MASK) and time.monotonic() >= _SEARCH_DEADLINE:
+        raise _SearchTimeout
+
+
 def _negamax(b, player, depth, alpha, beta, tt, P, exact_only=False):
     """Negamax with alpha/beta pruning and a transposition table.
 
     Scores are relative to the side to move and shift linearly with the
     absolute search depth (faster wins are preferred). The transposition
-    table therefore stores the depth at which a value was computed so it
-    can be reused at a different absolute depth, and each entry also keeps
-    a bound flag (EXACT/LOWER/UPPER). When exact_only is True, only EXACT
+    table therefore stores the depth at which a value was computed so it can
+    be reused at a different absolute depth, and each entry also keeps a
+    bound flag (EXACT/LOWER/UPPER). When exact_only is True, only EXACT
     bounds are trusted (used while reconstructing a principal variation)."""
+    if _SEARCH_DEADLINE is not None:
+        _tick_clock()
     n, nn, lines_full, lines_first_rest, cell_lines, neighbours, perm, transfer_allowed = P
+
     winner = _winner(b, lines_first_rest)
     if winner is not None:
         if winner == player:
@@ -292,6 +337,17 @@ def _best_move_at(b, player, depth, tt, P):
 
 
 _DIGITS = ("u", "d", "l", "r")
+TOP_MOVES = 5          # how many scored moves the time limited search remembers
+
+
+def _scored_value(item):
+    """Sort key for a (value, move) pair; moves are never compared to each other."""
+    return item[0]
+
+
+def _best_scored(scored, count):
+    """Return the ``count`` best (value, move) pairs, best first."""
+    return sorted(scored, key=_scored_value, reverse=True)[:count]
 
 
 # ---------------------------------------------------------------------------
@@ -421,6 +477,128 @@ def find_best_move(state, rotate_direction = "clockwise", transfer_allowed = Tru
             best = v
             best_move = move
     return _move_to_dict(best_move, player, rotate_direction, n), best
+
+
+def find_random_move(state, rotate_direction = "clockwise", transfer_allowed = True, player = 1, rng = None):
+    """
+    Picks one legal move at random, which is useful for quick games and as a
+    fallback for a computer opponent that should not think too hard.
+    Parameters:
+        state: the current game state (a numpy array)
+        rotate_direction: the direction in which the board is rotated
+        transfer_allowed: whether transfers are allowed between adjacent cells
+        player: the player whose move is chosen (1 or 2)
+        rng: an optional random.Random instance (a fresh one is used when omitted)
+    Returns:
+        A tuple (move, value) where move is a random legal move (a dictionary) and
+        value is always None, or (None, None) when no move is available.
+    """
+    n = state.shape[0]
+    P = _engine_params(n, rotate_direction, transfer_allowed)
+    b = tuple(state.ravel().tolist())
+    moves = _gen_moves(b, player, P[7], P[5], P[1])
+    if not moves:
+        return None, None
+    generator = random if rng is None else rng
+    move = generator.choice(moves)
+    return _move_to_dict(move, player, rotate_direction, n), None
+
+
+def _search_with_deadline(b, player, P, deadline, max_depth):
+    """Iterative deepening root search that stops as soon as the deadline hits.
+
+    Each iteration searches every root move to the same depth, so the move
+    values of a single iteration are directly comparable; the values of the
+    last *completed* iteration are the ones returned. Returns
+    (best_move, best_value, depth_reached, top_moves, timed_out)."""
+    tt = {}
+    ordered = _order_moves(_gen_moves(b, player, P[7], P[5], P[1]), b, player, P, None)
+    best_move, best_value, best_depth, top_moves = ordered[0], None, 0, []
+    timed_out = False
+    depth = 1
+    while max_depth is None or depth <= max_depth:
+        scored = []
+        partial_best, partial_value, partial_timed_out = None, None, False
+        for move in ordered:
+            if time.monotonic() >= deadline:
+                partial_timed_out = True
+                break
+            child = _apply_move(b, move, player, P[6], P[5])
+            try:
+                value = -_negamax(child, 3 - player, depth, -INF, INF, tt, P)
+            except _SearchTimeout:
+                partial_timed_out = True
+                break
+            scored.append((value, move))
+            if partial_value is None or value > partial_value:
+                partial_value, partial_best = value, move
+        if partial_timed_out:
+            timed_out = True
+            if best_depth == 0 and partial_best is not None:
+                # the very first iteration was cut short: keep the best move
+                # that was fully evaluated (its score is not reported though)
+                best_move = partial_best
+                top_moves = _best_scored(scored, TOP_MOVES)
+            break
+        if not scored:
+            break
+        best_move = max(scored, key=_scored_value)[1]
+        best_value, best_depth = max(scored, key=_scored_value)[0], depth
+        top_moves = _best_scored(scored, TOP_MOVES)
+        if abs(best_value) >= WIN_SCORE - depth:
+            break  # the horizon already proves the result
+        depth += 1
+    return best_move, best_value, best_depth, top_moves, timed_out
+
+
+def find_best_move_within_time(state, rotate_direction = "clockwise", transfer_allowed = True, player = 1, time_limit = 1.0, max_depth = None, top_moves_count = 5):
+    """
+    Determines the best move the search can find within a limited amount of
+    thinking time, using iterative deepening. Deeper iterations only start
+    once the previous one finished, so the returned move always comes from a
+    fully completed search.
+    Parameters:
+        state: the current game state (a numpy array)
+        rotate_direction: the direction in which the board is rotated
+        transfer_allowed: whether transfers are allowed between adjacent cells
+        player: the player whose move is chosen (1 or 2)
+        time_limit: maximum thinking time in seconds (must be positive)
+        max_depth: optional cap on the searched depth in moves
+        top_moves_count: how many alternatives to report in the info dictionary
+    Returns:
+        A tuple (best_move, best_value, info) where best_move is a move
+        (a dictionary), best_value is its minimax evaluation (None when even the
+        first iteration could not finish) and info is a dictionary with the
+        "depth", "nodes", "elapsed", "timed_out" and "top_moves" details.
+    """
+    n = state.shape[0]
+    time_limit = float(time_limit)
+    if not time_limit > 0:
+        raise ValueError("time_limit must be positive")
+    P = _engine_params(n, rotate_direction, transfer_allowed)
+    b = tuple(state.ravel().tolist())
+    if not _gen_moves(b, player, P[7], P[5], P[1]):
+        return None, None, {"depth": 0, "nodes": 0, "elapsed": 0.0,
+                            "timed_out": False, "top_moves": []}
+    start = time.monotonic()
+    _start_search(start + time_limit)
+    try:
+        best_move, best_value, depth, top_moves, timed_out = _search_with_deadline(
+            b, player, P, start + time_limit, max_depth,
+        )
+    finally:
+        nodes = _stop_search()
+    info = {
+        "depth": depth,
+        "nodes": nodes,
+        "elapsed": time.monotonic() - start,
+        "timed_out": timed_out,
+        "top_moves": [
+            (_move_to_dict(move, player, rotate_direction, n), value)
+            for value, move in top_moves[:top_moves_count]
+        ],
+    }
+    return _move_to_dict(best_move, player, rotate_direction, n), best_value, info
 
 
 def simulate_principal_variation(state, rotate_direction = "clockwise", transfer_allowed = True, player = 1, max_steps = 50):

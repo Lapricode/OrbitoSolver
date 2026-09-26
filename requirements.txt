@@ -1,0 +1,20 @@
+# Orbital Logic - Python dependencies
+# Verified on CPython 3.12.3 / Linux x86_64.
+#
+#   python3 -m venv orbvenv
+#   orbvenv/bin/pip install -r requirements.txt
+#   orbvenv/bin/python gui.py
+#
+# Versions are pinned to the set this codebase was developed and tested
+# against; relax them if you need a newer release.
+
+# Board arrays, search buffers (gui.py, solve_game.py, create_game_tablebase.py,
+# test_game.py, get_solution.py)
+numpy==2.5.3
+
+# GUI toolkit (gui.py)
+pygame==2.6.1
+
+# Progress bar for tablebase generation (create_game_tablebase.py, optional:
+# the script falls back to a no-op bar if it is missing)
+tqdm==4.67.1

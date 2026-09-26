@@ -1,98 +1,229 @@
 import sys
-import pygame
-import numpy as np
 import time
-from orbital_logic_game_functions import evaluate_game_state, play_turn
-from solve_game import find_best_move
 
-pygame.init()
+import numpy as np
+import pygame
+
+import computer_engine as engine
+import orbital_logic_game_functions as olgf
+
+
+# ---------------------
+# Layout and colours
+# ---------------------
+
+BOARD_SIZE = 600
+MENU_WIDTH = 380
+STATUS_HEIGHT = 140
+WINDOW_WIDTH = BOARD_SIZE + MENU_WIDTH
+WINDOW_HEIGHT = BOARD_SIZE + STATUS_HEIGHT
+
+PANEL_COLOR = (226, 226, 230)
+INPUT_BACKGROUND = (250, 250, 250)
+BOARD_LIGHT = (176, 122, 70)
+BOARD_DARK = (152, 101, 55)
+GRID_COLOR = (45, 26, 10)
+HOVER_COLOR = (0, 90, 255)
+SOURCE_COLOR = (220, 30, 30)
+TARGET_COLOR = (255, 140, 0)
+ADD_COLOR = (0, 190, 0)
+HINT_COLOR = (215, 0, 215)
+WIN_COLOR = (0, 150, 255)
+
+PLAYER_FILL = {1: (15, 15, 15), 2: (250, 250, 250)}
+PLAYER_OUTLINE = {1: (250, 250, 250), 2: (15, 15, 15)}
+PLAYER_NAMES = {0: "Empty", 1: "Black", 2: "White"}
+PLAYER_SYMBOLS = {1: "x", 2: "o"}
+
+MIN_GRID_SIZE = 1
+MAX_GRID_SIZE = 8
+MIN_THINK_TIME = 0.35
+
+FILL = "fill"  # panel row width meaning "use the whole panel width"
+
+PIECE_VALUES = {"Empty": 0, "Black": 1, "White": 2}
+
+ENGINE_OPTIONS = {
+    # radio button label: (look in the tablebase first, what to do otherwise)
+    "Tablebase, else random move": (True, engine.FALLBACK_RANDOM),
+    "Tablebase, else search": (True, engine.FALLBACK_SEARCH),
+    "Random move only": (False, engine.FALLBACK_RANDOM),
+    "Search only": (False, engine.FALLBACK_SEARCH),
+}
+
+EDITOR_HELP = (
+    "Left click places the selected piece, right click erases it and middle "
+    "click places the other player. The rules below are the ones the engine "
+    "uses, and they are shared with the game settings."
+)
+
+
+def dimmed_surface(surface, factor=0.6):
+    """Return a darker copy of a text surface (works on pygame and pygame-ce)."""
+    try:
+        return pygame.transform.multiply_alpha(surface, factor)
+    except AttributeError:
+        level = int(255 * factor)
+        dimmed = surface.copy()
+        dimmed.fill((level, level, level, 255), special_flags=pygame.BLEND_RGBA_MULT)
+        return dimmed
+
 
 # ---------------------
 # UI Element Classes
 # ---------------------
 
+class Label:
+    """A piece of static text."""
+
+    def __init__(self, text, font, color=(20, 20, 20)):
+        self.font = font
+        self.color = color
+        self.text = text
+        self.surface = self.font.render(text, True, color)
+        self.rect = pygame.Rect(0, 0, *self.surface.get_size())
+
+    def set_text(self, text):
+        if text != self.text:
+            self.text = text
+            self.surface = self.font.render(text, True, self.color)
+            self.rect.size = self.surface.get_size()
+
+    def handle_event(self, event):
+        return False
+
+    def draw(self, screen):
+        screen.blit(self.surface, self.rect)
+
+
 class InputBox:
-    def __init__(self, x, y, w, h, font_size, text=''):
-        self.rect = pygame.Rect(x, y, w, h)
+    """A single line numeric text field."""
+
+    def __init__(self, w, h, font_size, text='', decimal=False, max_len=5, on_enter=None):
+        self.rect = pygame.Rect(0, 0, w, h)
         self.color_inactive = pygame.Color('lightskyblue3')
         self.color_active = pygame.Color('dodgerblue2')
         self.color = self.color_inactive
         self.text = text
-        self.font_size = font_size
-        self.font = pygame.font.Font(None, self.font_size)
+        self.decimal = decimal
+        self.max_len = max_len
+        self.on_enter = on_enter
+        self.font = pygame.font.Font(None, font_size)
         self.txt_surface = self.font.render(text, True, pygame.Color('black'))
         self.active = False
 
+    @property
+    def number(self):
+        """The field content as a float, or None when it is not a number."""
+        try:
+            return float(self.text)
+        except ValueError:
+            return None
+
+    def set_text(self, text):
+        self.text = text
+        self.txt_surface = self.font.render(self.text, True, pygame.Color('black'))
+
     def handle_event(self, event):
         if event.type == pygame.MOUSEBUTTONDOWN:
-            if self.rect.collidepoint(event.pos):
-                self.active = True
-            else:
-                self.active = False
-            self.color = self.color_active if self.active else self.color_inactive
+            inside = self.rect.collidepoint(event.pos)
+            self.active = inside
+            self.color = self.color_active if inside else self.color_inactive
+            return inside
         if event.type == pygame.KEYDOWN and self.active:
-            if event.key == pygame.K_RETURN:
+            if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
                 self.active = False
                 self.color = self.color_inactive
+                if self.on_enter is not None:
+                    self.on_enter()
             elif event.key == pygame.K_BACKSPACE:
                 self.text = self.text[:-1]
+            elif event.key == pygame.K_DELETE:
+                self.text = ''
+            elif len(self.text) < self.max_len and (
+                    event.unicode.isdigit() or
+                    (self.decimal and event.unicode == '.' and '.' not in self.text)):
+                self.text += event.unicode
             else:
-                if event.unicode.isdigit():
-                    self.text += event.unicode
+                return False
             self.txt_surface = self.font.render(self.text, True, pygame.Color('black'))
+            return True
+        return False
 
     def draw(self, screen):
-        screen.blit(self.txt_surface, (self.rect.x+5, self.rect.y+5))
+        pygame.draw.rect(screen, INPUT_BACKGROUND, self.rect)
         pygame.draw.rect(screen, self.color, self.rect, 2)
+        screen.blit(self.txt_surface, (self.rect.x + 5, self.rect.y + 5))
+
 
 class Button:
-    def __init__(self, x, y, w, h, font_size, text, callback=None):
-        self.rect = pygame.Rect(x, y, w, h)
+    """A clickable button with an optional callback."""
+
+    def __init__(self, w, h, font_size, text, callback=None, enabled=True):
+        self.rect = pygame.Rect(0, 0, w, h)
         self.normal_color = pygame.Color('gray')
         self.hover_color = pygame.Color('lightgray')
         self.pressed_color = pygame.Color('darkgray')
+        self.disabled_color = pygame.Color(206, 206, 210)
         self.text = text
-        self.font_size = font_size
-        self.font = pygame.font.Font(None, self.font_size)
+        self.font = pygame.font.Font(None, font_size)
         self.txt_surface = self.font.render(self.text, True, pygame.Color('black'))
+        self.faded_surface = dimmed_surface(self.txt_surface)
         self.callback = callback
+        self.enabled = enabled
         self.is_pressed = False
 
+    def set_text(self, text):
+        if text != self.text:
+            self.text = text
+            self.txt_surface = self.font.render(self.text, True, pygame.Color('black'))
+            self.faded_surface = dimmed_surface(self.txt_surface)
+
     def handle_event(self, event):
+        if not self.enabled:
+            return False
         if event.type == pygame.MOUSEBUTTONDOWN:
             if self.rect.collidepoint(event.pos):
                 self.is_pressed = True
+                return True
         elif event.type == pygame.MOUSEBUTTONUP:
-            if self.is_pressed and self.rect.collidepoint(event.pos):
-                if self.callback:
-                    self.callback()
-            self.is_pressed = False
+            if self.is_pressed:
+                pressed_inside = self.rect.collidepoint(event.pos)
+                self.is_pressed = False
+                if pressed_inside:
+                    if self.callback:
+                        self.callback()
+                    return True
+        return False
 
     def draw(self, screen):
-        mouse_pos = pygame.mouse.get_pos()
-        if self.rect.collidepoint(mouse_pos):
-            if self.is_pressed:
-                color = self.pressed_color
-            else:
-                color = self.hover_color
+        if not self.enabled:
+            color = self.disabled_color
         else:
-            color = self.normal_color
+            mouse_pos = pygame.mouse.get_pos()
+            if self.rect.collidepoint(mouse_pos):
+                color = self.pressed_color if self.is_pressed else self.hover_color
+            else:
+                color = self.normal_color
         pygame.draw.rect(screen, color, self.rect)
         text_rect = self.txt_surface.get_rect(center=self.rect.center)
-        screen.blit(self.txt_surface, text_rect)
+        screen.blit(self.faded_surface if not self.enabled else self.txt_surface, text_rect)
+
 
 class Checkbox:
-    def __init__(self, x, y, size, font_size, text, checked=False):
-        self.rect = pygame.Rect(x, y, size, size)
+    """A labelled on/off box."""
+
+    def __init__(self, size, font_size, text, checked=False):
+        self.rect = pygame.Rect(0, 0, size, size)
         self.checked = checked
         self.text = text
-        self.font_size = font_size
-        self.font = pygame.font.Font(None, self.font_size)
+        self.font = pygame.font.Font(None, font_size)
 
     def handle_event(self, event):
-        if event.type == pygame.MOUSEBUTTONDOWN:
-            if self.rect.collidepoint(event.pos):
-                self.checked = not self.checked
+        if event.type == pygame.MOUSEBUTTONDOWN and self.rect.collidepoint(event.pos):
+            self.checked = not self.checked
+            return True
+        return False
 
     def draw(self, screen):
         pygame.draw.rect(screen, pygame.Color('white'), self.rect)
@@ -101,457 +232,1151 @@ class Checkbox:
             pygame.draw.line(screen, pygame.Color('black'), self.rect.topleft, self.rect.bottomright, 2)
             pygame.draw.line(screen, pygame.Color('black'), self.rect.topright, self.rect.bottomleft, 2)
         txt_surface = self.font.render(self.text, True, pygame.Color('black'))
-        screen.blit(txt_surface, (self.rect.right + 5, self.rect.y))
+        screen.blit(txt_surface, (self.rect.right + 8, self.rect.y))
+
 
 class RadioButton:
-    def __init__(self, x, y, radius, font_size, text, selected=False):
-        self.x = x
-        self.y = y
+    """One option of a group of mutually exclusive radio buttons.
+
+    Passing a ``group`` list registers the button in it, so the group can be
+    built while the buttons are created and a single click always leaves
+    exactly one button of the group selected.
+    """
+
+    def __init__(self, radius, font_size, text, group=None, selected=False):
+        self.rect = pygame.Rect(0, 0, 2 * radius, 2 * radius)
         self.radius = radius
         self.text = text
-        self.font_size = font_size
+        self.font = pygame.font.Font(None, font_size)
         self.selected = selected
-        self.font = pygame.font.Font(None, self.font_size)
-        self.circle_rect = pygame.Rect(x - radius, y - radius, 2*radius, 2*radius)
+        self.group = [] if group is None else group
+        self.group.append(self)
+        if selected:
+            for button in self.group:
+                button.selected = button is self
 
-    def handle_event(self, event, group):
-        if event.type == pygame.MOUSEBUTTONDOWN:
-            if self.circle_rect.collidepoint(event.pos):
-                for btn in group:
-                    btn.selected = False
-                self.selected = True
+    def handle_event(self, event):
+        if event.type == pygame.MOUSEBUTTONDOWN and self.rect.collidepoint(event.pos):
+            for button in self.group:
+                button.selected = button is self
+            return True
+        return False
 
     def draw(self, screen):
-        pygame.draw.circle(screen, pygame.Color('black'), (self.x, self.y), self.radius, 2)
+        center = self.rect.center
+        pygame.draw.circle(screen, pygame.Color('black'), center, self.radius, 2)
         if self.selected:
-            pygame.draw.circle(screen, pygame.Color('black'), (self.x, self.y), self.radius - 4)
+            pygame.draw.circle(screen, pygame.Color('black'), center, self.radius - 4)
         txt_surface = self.font.render(self.text, True, pygame.Color('black'))
-        screen.blit(txt_surface, (self.x + self.radius + 10, self.y - self.radius))
+        screen.blit(txt_surface, (self.rect.right + 10, self.rect.centery - txt_surface.get_height() // 2))
+
+
+def radio_group(font_size, options, default=0):
+    """Build a list of radio buttons that know each other.
+
+    ``options`` holds the labels and the one at ``default`` starts selected.
+    A click on any of them leaves exactly one selected.
+    """
+    group = []
+    for index, text in enumerate(options):
+        RadioButton(9, font_size, text, group, selected=index == default)
+    return group
+
+
+class TextPanel:
+    """A word wrapped read-only text area, optionally scrollable."""
+
+    WHEEL_STEP = 3
+
+    def __init__(self, w, h, font, title=None, background=(248, 248, 248),
+                 border=(110, 110, 110), padding=8, scrollable=True):
+        self.rect = pygame.Rect(0, 0, w, h)
+        self.font = font
+        self.title = title
+        self.title_surface = font.render(title, True, (20, 20, 20)) if title else None
+        self.background = background
+        self.border = border
+        self.padding = padding
+        self.scrollable = scrollable
+        self.scroll = 0
+        self.lines = [""]
+        self.line_height = font.get_linesize() + 2
+        self._raw = None
+        self._wrap_width = None
+
+    @property
+    def text(self):
+        return self._raw or ""
+
+    @property
+    def text_width(self):
+        return max(20, self.rect.width - 2 * self.padding)
+
+    def set_text(self, text):
+        if text == self._raw:
+            return
+        self._raw = text
+        self._rewrap()
+
+    def clear(self):
+        self.set_text("")
+        self.scroll = 0
+
+    def _rewrap(self):
+        width = self.text_width
+        lines = []
+        for raw_line in self.text.split("\n"):
+            if not raw_line:
+                lines.append("")
+                continue
+            current = ""
+            for word in raw_line.split(" "):
+                candidate = word if not current else current + " " + word
+                if not current or self.font.size(candidate)[0] <= width:
+                    current = candidate
+                else:
+                    lines.append(current)
+                    current = word
+            lines.append(current)
+        self.lines = lines or [""]
+        if width != self._wrap_width:
+            self.scroll = min(self.scroll, self.max_scroll)
+            self._wrap_width = width
+
+    @property
+    def header_height(self):
+        return self.line_height + 4 if self.title_surface is not None else 0
+
+    @property
+    def body_height(self):
+        return max(self.line_height, self.rect.height - 2 * self.padding - self.header_height)
+
+    @property
+    def visible_lines(self):
+        return max(1, self.body_height // self.line_height)
+
+    @property
+    def max_scroll(self):
+        return max(0, len(self.lines) - self.visible_lines)
+
+    def scroll_to_end(self):
+        self.scroll = self.max_scroll
+
+    def handle_event(self, event):
+        if (self.scrollable and event.type == pygame.MOUSEWHEEL
+                and self.rect.collidepoint(pygame.mouse.get_pos())):
+            self.scroll = max(0, min(self.max_scroll, self.scroll - event.y * self.WHEEL_STEP))
+            return True
+        return False
+
+    def draw(self, screen):
+        self._rewrap()
+        pygame.draw.rect(screen, self.background, self.rect)
+        top = self.rect.y + self.padding
+        if self.title_surface is not None:
+            screen.blit(self.title_surface, (self.rect.x + self.padding, top))
+            top += self.header_height
+        previous_clip = screen.get_clip()
+        screen.set_clip(pygame.Rect(self.rect.x, top, self.rect.width,
+                                    max(0, self.rect.bottom - top - self.padding)))
+        for index in range(int(self.scroll), len(self.lines)):
+            y = top + (index - self.scroll) * self.line_height
+            surface = self.font.render(self.lines[index], True, (25, 25, 25))
+            screen.blit(surface, (self.rect.x + self.padding, y))
+        screen.set_clip(previous_clip)
+        pygame.draw.rect(screen, self.border, self.rect, 2)
+        if self.scrollable and self.max_scroll > 0:
+            track = pygame.Rect(self.rect.right - 8, top, 5, max(1, self.rect.bottom - top - self.padding))
+            pygame.draw.rect(screen, (200, 200, 200), track)
+            knob_height = max(16, int(track.height * self.visible_lines / len(self.lines)))
+            knob_y = track.y + int((track.height - knob_height) * self.scroll / self.max_scroll)
+            pygame.draw.rect(screen, (110, 110, 110),
+                             pygame.Rect(track.x, knob_y, track.width, knob_height))
+
+
+class Panel:
+    """A scrollable column of widgets drawn on a coloured background."""
+
+    WHEEL_STEP = 26
+
+    def __init__(self, rect, background=PANEL_COLOR, padding=14, gap=4, spacing=8):
+        self.rect = pygame.Rect(rect)
+        self.background = background
+        self.padding = padding
+        self.gap = gap
+        self.spacing = spacing
+        self.scroll = 0
+        self.rows = []
+
+    def add_row(self, height, widgets, fill=False):
+        """Add a row of ``(widget, x, width, height)`` items.
+
+        ``x`` may be None to place the widget right after the previous one,
+        ``width`` and ``height`` may be None to keep the natural size of the
+        widget (centered inside the row), and the width :data:`FILL` uses the
+        rest of the panel. A row added with ``fill`` takes the vertical space
+        left over by the other rows and stretches its widgets.
+        """
+        self.rows.append({"height": height, "widgets": list(widgets), "fill": fill})
+        return self
+
+    @property
+    def content_width(self):
+        return max(20, self.rect.width - 2 * self.padding)
+
+    def _row_height(self, row):
+        """Height a row needs without being stretched by a fill row."""
+        natural = max((widget.rect.height for widget, _x, _w, _h in row["widgets"]), default=0)
+        return max(row["height"], natural)
+
+    def _fixed_height(self):
+        """Height of every row that is not a fill row, gaps included."""
+        rows = [row for row in self.rows if not row["fill"]]
+        if not rows:
+            return 0
+        return sum(self._row_height(row) for row in rows) + self.gap * (len(rows) - 1)
+
+    def _fill_height(self):
+        """Height every fill row shares: what the other rows leave over."""
+        flexible = [row for row in self.rows if row["fill"]]
+        if not flexible:
+            return 0
+        leftover = self.rect.height - 2 * self.padding - self._fixed_height()
+        return max(0, leftover // len(flexible))
+
+    def content_height(self):
+        """Total height the rows need when nothing is scrolled out."""
+        fill_height = self._fill_height()
+        heights = [fill_height if row["fill"] else self._row_height(row) for row in self.rows]
+        gaps = self.gap * max(0, len(heights) - 1)
+        return max(0, sum(heights) + gaps)
+
+    @property
+    def max_scroll(self):
+        return max(0, self.content_height() - self.rect.height)
+
+    def layout(self):
+        """Give every widget its final on screen rectangle."""
+        fill_height = self._fill_height()
+        y = self.padding - int(self.scroll)
+        for row in self.rows:
+            height = fill_height if row["fill"] else self._row_height(row)
+            cursor = 0
+            for widget, x, width, widget_height in row["widgets"]:
+                offset = cursor if x is None else x
+                if width == FILL:
+                    final_width = max(20, self.content_width - offset)
+                elif width is None:
+                    final_width = widget.rect.width
+                else:
+                    final_width = width
+                if row["fill"] and not widget_height:
+                    final_height = height
+                elif widget_height is None:
+                    final_height = widget.rect.height
+                else:
+                    final_height = widget_height
+                widget.rect.size = (final_width, final_height)
+                widget.rect.topleft = (self.rect.x + self.padding + offset,
+                                       y + (height - final_height) // 2)
+                cursor = offset + final_width + self.spacing
+            y += height + self.gap
+        self.scroll = max(0, min(self.max_scroll, self.scroll))
+
+
+    def handle_event(self, event):
+        self.layout()
+        handled = False
+        for row in self.rows:
+            for widget, _x, _w, _h in row["widgets"]:
+                if not self.rect.colliderect(widget.rect):
+                    continue
+                if widget.handle_event(event):
+                    handled = True
+        if (not handled and event.type == pygame.MOUSEWHEEL
+                and self.rect.collidepoint(pygame.mouse.get_pos())):
+            self.scroll = max(0, min(self.max_scroll, self.scroll - event.y * self.WHEEL_STEP))
+            handled = True
+        self.layout()
+        return handled
+
+    def draw(self, screen):
+        pygame.draw.rect(screen, self.background, self.rect)
+        self.layout()
+        previous_clip = screen.get_clip()
+        screen.set_clip(self.rect)
+        for row in self.rows:
+            for widget, _x, _w, _h in row["widgets"]:
+                widget.draw(screen)
+        screen.set_clip(previous_clip)
+        if self.max_scroll > 0:
+            track = pygame.Rect(self.rect.right - 8, self.rect.y + 4, 5, self.rect.height - 8)
+            pygame.draw.rect(screen, (205, 205, 205), track)
+            content = max(1, self.content_height())
+            knob_height = max(20, int(track.height * self.rect.height / content))
+            knob_y = track.y + int((track.height - knob_height) * self.scroll / self.max_scroll)
+            pygame.draw.rect(screen, (120, 120, 120),
+                             pygame.Rect(track.x, knob_y, track.width, knob_height))
+
 
 # ---------------------
 # Drawing functions
 # ---------------------
 
-def draw_board(screen, board_state, board_rect, hover_cell, selections, font):
-    board_color = (150, 75, 0)  # brown background
-    grid_color = (0, 0, 0)
-    pygame.draw.rect(screen, board_color, board_rect)
+def find_winning_lines(state):
+    """Return every (line, player) pair that fills a row, column or diagonal."""
+    n = state.shape[0]
+    lines = [tuple((r, c) for c in range(n)) for r in range(n)]
+    lines += [tuple((r, c) for r in range(n)) for c in range(n)]
+    lines.append(tuple((i, i) for i in range(n)))
+    lines.append(tuple((i, n - 1 - i) for i in range(n)))
+    winners = []
+    for line in lines:
+        value = int(state[line[0]])
+        if value and all(int(state[cell]) == value for cell in line):
+            winners.append((line, value))
+    return winners
+
+
+def cell_at(position, board_rect, board_state):
+    """Board cell under a window position, or None when outside the board."""
+    if board_state is None or not board_rect.collidepoint(position):
+        return None
     rows, cols = board_state.shape
-    cell_width = board_rect.width // cols
-    cell_height = board_rect.height // rows
+    col = (position[0] - board_rect.x) // max(1, board_rect.width // cols)
+    row = (position[1] - board_rect.y) // max(1, board_rect.height // rows)
+    if not (0 <= row < rows and 0 <= col < cols):
+        return None
+    return int(row), int(col)
 
-    # Draw grid
+
+def transfer_target(move):
+    """Board cell an already built transfer move lands on, or None."""
+    transfer = move.get("transfer")
+    if transfer is None:
+        return None
+    source, direction = transfer[0], str(transfer[1]).lower()
+    row, col = int(source[0]), int(source[1])
+    if direction in ("u", "up"):
+        row -= 1
+    elif direction in ("d", "down"):
+        row += 1
+    elif direction in ("l", "left"):
+        col -= 1
+    elif direction in ("r", "right"):
+        col += 1
+    else:
+        return None
+    return row, col
+
+
+def move_highlights(move):
+    """Highlight cells used by a move dictionary."""
+    if move is None:
+        return []
+    highlights = []
+    transfer = move.get("transfer")
+    if transfer is not None:
+        highlights.append(((int(transfer[0][0]), int(transfer[0][1])), SOURCE_COLOR, 3))
+        target = transfer_target(move)
+        if target is not None:
+            highlights.append((target, TARGET_COLOR, 3))
+    add = move.get("add")
+    if add is not None:
+        highlights.append(((int(add[0]), int(add[1])), ADD_COLOR, 3))
+    return highlights
+
+
+def selection_highlights(selections):
+    """Highlight cells of the move currently being built by hand."""
+    highlights = []
+    for key, color in (("transfer_source", SOURCE_COLOR), ("transfer_target", TARGET_COLOR),
+                       ("add", ADD_COLOR)):
+        if selections.get(key) is not None:
+            highlights.append((tuple(int(v) for v in selections[key]), color, 3))
+    return highlights
+
+
+def draw_board(screen, board_state, board_rect, hover_cell=None, highlights=(), winning_lines=()):
+    """Draw the board with its grid, its pieces and the cell highlights."""
+    pygame.draw.rect(screen, BOARD_DARK, board_rect)
+    rows, cols = board_state.shape
+    cell_width = max(1, board_rect.width // cols)
+    cell_height = max(1, board_rect.height // rows)
+
+    def cell_rect(cell):
+        row, col = cell
+        return pygame.Rect(board_rect.x + col * cell_width,
+                           board_rect.y + row * cell_height,
+                           cell_width, cell_height)
+
     for i in range(rows):
         for j in range(cols):
-            cell_rect = pygame.Rect(board_rect.x + j*cell_width, board_rect.y + i*cell_height, cell_width, cell_height)
-            pygame.draw.rect(screen, grid_color, cell_rect, 1)
+            cell = cell_rect((i, j))
+            pygame.draw.rect(screen, BOARD_LIGHT if (i + j) % 2 == 0 else BOARD_DARK, cell)
+            pygame.draw.rect(screen, GRID_COLOR, cell, 1)
 
-    # Hover highlight (blue)
+    for cell, color, width in highlights:
+        if cell is not None:
+            pygame.draw.rect(screen, color, cell_rect(cell), width)
+
+    for line, _player in winning_lines:
+        points = [cell_rect(cell).center for cell in line]
+        if len(points) > 1:
+            pygame.draw.lines(screen, WIN_COLOR, False, points, max(3, cell_width // 12))
+
     if hover_cell is not None:
-        hi, hj = hover_cell
-        cell_rect = pygame.Rect(board_rect.x + hj*cell_width, board_rect.y + hi*cell_height, cell_width, cell_height)
-        pygame.draw.rect(screen, (0, 0, 255), cell_rect, 3)
+        pygame.draw.rect(screen, HOVER_COLOR, cell_rect(hover_cell), 3)
 
-    # Highlight selections
-    if selections.get("transfer_source") is not None:
-        i, j = selections["transfer_source"]
-        cell_rect = pygame.Rect(board_rect.x + j*cell_width, board_rect.y + i*cell_height, cell_width, cell_height)
-        pygame.draw.rect(screen, (255, 0, 0), cell_rect, 3)
-    if selections.get("transfer_target") is not None:
-        i, j = selections["transfer_target"]
-        cell_rect = pygame.Rect(board_rect.x + j*cell_width, board_rect.y + i*cell_height, cell_width, cell_height)
-        pygame.draw.rect(screen, (255, 0, 0), cell_rect, 3)
-    if selections.get("add") is not None:
-        i, j = selections["add"]
-        cell_rect = pygame.Rect(board_rect.x + j*cell_width, board_rect.y + i*cell_height, cell_width, cell_height)
-        pygame.draw.rect(screen, (0, 255, 0), cell_rect, 3)
-
-    # Draw pieces.
     for i in range(rows):
         for j in range(cols):
-            center = (board_rect.x + j*cell_width + cell_width//2, board_rect.y + i*cell_height + cell_height//2)
-            radius = min(cell_width, cell_height) // 3
-            if board_state[i, j] == 1:
-                pygame.draw.circle(screen, (0, 0, 0), center, radius)
-            elif board_state[i, j] == 2:
-                pygame.draw.circle(screen, (255, 255, 255), center, radius)
+            value = int(board_state[i, j])
+            if value == 0:
+                continue
+            center = cell_rect((i, j)).center
+            radius = max(2, min(cell_width, cell_height) // 3)
+            pygame.draw.circle(screen, PLAYER_FILL[value], center, radius)
+            pygame.draw.circle(screen, PLAYER_OUTLINE[value], center, radius, 2)
+
 
 # ---------------------
 # Main Program
 # ---------------------
 
 def main():
-    # Window dimensions.
-    BOARD_WIDTH = 600
-    MENU_WIDTH = 300
-    BOARD_HEIGHT = BOARD_WIDTH
-    WINDOW_WIDTH, WINDOW_HEIGHT = BOARD_WIDTH + MENU_WIDTH, BOARD_WIDTH
+    pygame.init()
+    board_width = BOARD_SIZE
+    menu_width = MENU_WIDTH
     screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.RESIZABLE)
     pygame.display.set_caption("Orbital Logic Game")
     clock = pygame.time.Clock()
 
-    # ---------------- State Variables ----------------
-    mode_state = "menu"  # "menu" or "playing"
-    game_over = False
-    game_message = ""
+    # ---------------- State ----------------
+    mode_state = "menu"  # "menu", "playing" or "editor"
 
-    # Game settings (set in menu).
-    grid_size = 3
-    transfer_allowed = True
-    rotation_allowed = True
-    move_completion_mode = "auto"  # "auto" or "manual"
-    game_mode_choice = "2 Players"   # or "Vs Computer"
-    rotate_direction = "clockwise" if rotation_allowed else "still"
+    board_rect = pygame.Rect(0, 0, board_width, BOARD_SIZE)
+    status_rect = pygame.Rect(0, board_rect.bottom, board_width, STATUS_HEIGHT)
+    menu_rect = pygame.Rect(board_width, 0, menu_width, WINDOW_HEIGHT)
 
-    # Game variables (set when game starts).
-    board_state = None
-    current_player = 1  # 1 = Black, 2 = White
-    current_move = {"transfer": {"source": None, "target": None}, "add": None}
-    move_phase = "none"  # "none", "transfer_target", "add_move"
-    selections = {"transfer_source": None, "transfer_target": None, "add": None}
+    game = {
+        "board": np.zeros((3, 3), dtype=int),
+        "player": 1,        # player to move (1 = Black, 2 = White)
+        "over": False,
+        "message": "",
+        "move": {"transfer": {"source": None, "target": None}, "add": None},
+        "phase": "none",    # "none", "transfer_target" or "add_move"
+        "selections": {"transfer_source": None, "transfer_target": None, "add": None},
+        "log": [],
+        "message_line": "",
+        "hint": None,       # move suggested by the hint button
+        "busy": False,      # a computer answer is on its way
+        "busy_kind": "",    # "computer" or "hint"
+        "busy_since": 0.0,
+        "pending": None,    # (result, arrival time, kind) waiting out the think time
+        "blocked": False,   # the computer cannot answer, wait for the human
+        "vs_computer": False,  # the computer plays the other side
+    }
 
-    # Confirmation dialog state.
-    confirm_box_active = False
-    confirm_action = None  # "restart" or "new_game"
-    # Define a confirmation dialog rectangle.
-    confirm_box_rect = pygame.Rect(WINDOW_WIDTH//2 - 150, WINDOW_HEIGHT//2 - 100, 300, 200)
-    
-    # ---------------- Menu Layout for Settings ----------------
-    menu_area = pygame.Rect(BOARD_WIDTH, 0, MENU_WIDTH, WINDOW_HEIGHT)
-    num_items = 11
-    margin_top = 20
-    margin_bottom = 20
-    available_height = menu_area.height - margin_top - margin_bottom
-    spacing = available_height / (num_items)
+    editor = {
+        "board": np.zeros((3, 3), dtype=int),
+        "player": 1,        # player to move in the drawn position
+        "suggestion": None, # move suggested by the engine
+        "busy": False,
+        "busy_since": 0.0,
+    }
+    tablebase_sizes = engine.available_grid_sizes()
 
-    title_y           = margin_top
-    grid_label_y      = title_y + spacing
-    input_y           = grid_label_y
-    transfer_cb_y     = grid_label_y + spacing
-    rotation_cb_y     = transfer_cb_y + spacing
-    game_mode_label_y = rotation_cb_y + spacing
-    rb_game1_y        = game_mode_label_y + spacing
-    rb_game2_y        = rb_game1_y + spacing
-    move_mode_label_y = rb_game2_y + spacing
-    rb_move1_y        = move_mode_label_y + spacing
-    rb_move2_y        = rb_move1_y + spacing
-    start_button_y    = rb_move2_y + spacing
+    # ---------------- Fonts ----------------
+    title_font = pygame.font.Font(None, 46)
+    heading_font = pygame.font.Font(None, 30)
+    body_font = pygame.font.Font(None, 26)
+    small_font = pygame.font.Font(None, 22)
+    huge_font = pygame.font.Font(None, 42)
 
-    menu_start_x = BOARD_WIDTH + 20
+    # ---------------- Shared setting widgets ----------------
+    grid_size_box = InputBox(62, 32, body_font.get_height(), text="3")
+    time_limit_box = InputBox(72, 32, body_font.get_height(), text="2.0", decimal=True, max_len=5)
+    transfer_checkbox = Checkbox(20, body_font.get_height(), "Allow Transfer Moves", checked=True)
+    rotation_group = radio_group(body_font.get_height(),
+                                 ["Still", "Clockwise", "Counterclockwise"], default=1)
+    mode_group = radio_group(body_font.get_height(),
+                             ["2 Players", "Vs Computer", "Position Editor"])
+    mode_computer, mode_editor = mode_group[1], mode_group[2]
+    engine_group = radio_group(body_font.get_height(),
+                               ["Tablebase, else random move", "Tablebase, else search",
+                                "Random move only", "Search only"])
+    completion_group = radio_group(body_font.get_height(),
+                                   ["Auto Move Completion", "Manual Move Completion"])
 
-    menu_title_font   = pygame.font.Font(None, 44)
-    menu_options_font = pygame.font.Font(None, 30)
-    game_mode_font    = pygame.font.Font(None, 40)
-    InputBox_font    = 28
-    Button_font      = 28
-    Checkbox_font    = 28
-    RadioButton_font = 28
-    
-    grid_size_box = InputBox(menu_start_x + 130, input_y, 60, 30, InputBox_font, text="4")
-    transfer_checkbox = Checkbox(menu_start_x, transfer_cb_y, 20, Checkbox_font, "Allow Transfer Moves", checked=True)
-    rotation_checkbox = Checkbox(menu_start_x, rotation_cb_y, 20, Checkbox_font, "Allow Rotation", checked=True)
-    rb_game1 = RadioButton(menu_start_x, rb_game1_y, 10, RadioButton_font, "2 Players", selected=True)
-    rb_game2 = RadioButton(menu_start_x, rb_game2_y, 10, RadioButton_font, "Vs Computer", selected=False)
-    rb_move1 = RadioButton(menu_start_x, rb_move1_y, 10, RadioButton_font, "Auto Move Completion", selected=True)
-    rb_move2 = RadioButton(menu_start_x, rb_move2_y, 10, RadioButton_font, "Manual Move Completion", selected=False)
-
-    def start_game():
-        nonlocal mode_state, board_state, current_player, game_over, game_message
-        nonlocal grid_size, transfer_allowed, rotation_allowed, move_completion_mode, game_mode_choice, rotate_direction
+    def read_grid_size(default=3):
         try:
-            grid_size = int(grid_size_box.text)
-            if grid_size < 2:
-                grid_size = 2
-        except:
-            grid_size = 3
-        board_state = np.zeros((grid_size, grid_size), dtype=int)
-        current_player = 1
-        game_over = False
-        game_message = ""
-        transfer_allowed = transfer_checkbox.checked
-        rotation_allowed = rotation_checkbox.checked
-        rotate_direction = "clockwise" if rotation_allowed else "still"
-        game_mode_choice = "Vs Computer" if rb_game2.selected else "2 Players"
-        move_completion_mode = "manual" if rb_move2.selected else "auto"
-        reset_turn()
-        mode_state = "playing"
-    start_button = Button(menu_start_x, start_button_y, 260, 60, Button_font, "Start Game", start_game)
+            size = int(grid_size_box.text)
+        except ValueError:
+            return default
+        return max(MIN_GRID_SIZE, min(MAX_GRID_SIZE, size))
 
-    # ---------------- In-Game UI Elements (Fixed Positions) ----------------
-    # These four buttons are always shown in game mode.
-    game_menu_x = BOARD_WIDTH + 20
-    game_mode_buttons_length = 260
-    game_mode_buttons_height = 60
-    game_mode_buttons_spacing = 80
-    restart_button_y = 150
-    new_game_button_y = restart_button_y + game_mode_buttons_spacing
-    take_back_button_y = new_game_button_y + game_mode_buttons_spacing
-    complete_move_button_y = take_back_button_y + game_mode_buttons_spacing
-    restart_button = Button(game_menu_x, restart_button_y, game_mode_buttons_length, game_mode_buttons_height, Button_font, "Restart")
-    new_game_button = Button(game_menu_x, new_game_button_y, game_mode_buttons_length, game_mode_buttons_height, Button_font, "New Game")
-    take_back_button = Button(game_menu_x, take_back_button_y, game_mode_buttons_length, game_mode_buttons_height, Button_font, "Take Back")
-    complete_move_button = Button(game_menu_x, complete_move_button_y, game_mode_buttons_length, game_mode_buttons_height, Button_font, "Complete Move")
+    def current_rotation():
+        chosen = next(radio.text for radio in rotation_group if radio.selected)
+        return {"Clockwise": "clockwise",
+                "Counterclockwise": "counterclockwise"}.get(chosen, "still")
 
-    # Set up confirmation callbacks for Restart and New Game.
-    def on_restart_button():
-        nonlocal confirm_box_active, confirm_action
-        confirm_box_active = True
-        confirm_action = "restart"
+    def read_time_limit():
+        value = time_limit_box.number
+        return engine.DEFAULT_TIME_LIMIT if value is None else engine.clamp_time_limit(value)
 
-    def on_new_game_button():
-        nonlocal confirm_box_active, confirm_action
-        confirm_box_active = True
-        confirm_action = "new_game"
+    def engine_config():
+        chosen = next(radio.text for radio in engine_group if radio.selected)
+        use_tablebase, fallback = ENGINE_OPTIONS[chosen]
+        return {"use_tablebase": use_tablebase, "fallback": fallback}
 
-    restart_button.callback = on_restart_button
-    new_game_button.callback = on_new_game_button
+    def engine_config_text():
+        config = engine_config()
+        prefix = "tablebase, then " if config["use_tablebase"] else "no tablebase, "
+        if config["fallback"] == engine.FALLBACK_SEARCH:
+            return f"Engine: {prefix}search for {read_time_limit():g}s"
+        return f"Engine: {prefix}random move"
 
-    def take_back():
-        nonlocal move_phase, current_move, selections
-        if current_move["add"] is not None:
-            current_move["add"] = None
-            selections["add"] = None
-            if transfer_allowed and current_move["transfer"]["target"] is not None:
-                move_phase = "transfer_target"
-            else:
-                move_phase = "none"
-        elif current_move["transfer"]["target"] is not None:
-            current_move["transfer"]["target"] = None
-            selections["transfer_target"] = None
-            move_phase = "transfer_target"
-        elif current_move["transfer"]["source"] is not None:
-            current_move["transfer"]["source"] = None
-            selections["transfer_source"] = None
-            move_phase = "none"
-    take_back_button.callback = take_back
+    def vs_computer():
+        return game["vs_computer"]
 
-    def complete_move():
-        nonlocal board_state, current_player, current_move, move_phase, game_over, game_message
-        if move_phase == "add_move" and current_move["add"] is not None:
-            move = {"player": current_player, "transfer": None, "add": current_move["add"], "rotate": rotate_direction}
-            if transfer_allowed and current_move["transfer"]["source"] is not None and current_move["transfer"]["target"] is not None:
-                src = current_move["transfer"]["source"]
-                tgt = current_move["transfer"]["target"]
-                dr = tgt[0] - src[0]
-                dc = tgt[1] - src[1]
-                if dr == -1 and dc == 0:
-                    direction = "u"
-                elif dr == 1 and dc == 0:
-                    direction = "d"
-                elif dc == -1 and dr == 0:
-                    direction = "l"
-                elif dc == 1 and dr == 0:
-                    direction = "r"
-                else:
-                    direction = None
-                move["transfer"] = [src, direction]
-            new_state = play_turn(board_state, move)
-            if np.array_equal(new_state, board_state):
-                print("Invalid move! Try again.")
-                return
-            else:
-                board_state = new_state
-                result = evaluate_game_state(board_state)
-                if result is None and not np.any(board_state == 0):
-                    result = 0
-                if result is not None:
-                    game_over = True
-                    if result == 0:
-                        game_message = "It's a draw!"
-                    elif result == 1:
-                        game_message = "Black wins!"
-                    elif result == 2:
-                        game_message = "White wins!"
-                else:
-                    current_player = 3 - current_player
-                reset_turn()
-    complete_move_button.callback = complete_move
+    def resize_board(board, size):
+        resized = np.zeros((size, size), dtype=int)
+        rows = min(size, board.shape[0])
+        cols = min(size, board.shape[1])
+        resized[:rows, :cols] = board[:rows, :cols]
+        return resized
 
-    def restart_game():
-        nonlocal board_state, current_player, game_over, game_message
-        board_state = np.zeros(board_state.shape, dtype=int)
-        current_player = 1
-        game_over = False
-        game_message = ""
-        reset_turn()
-
-    def switch_to_menu():
-        nonlocal mode_state
-        mode_state = "menu"
+    def evaluate_position(board):
+        """Return (board, game_over, message) for a board, empty or finished."""
+        result = olgf.evaluate_game_state(board)
+        if result is None and not np.any(board == 0):
+            result = 0
+        if result is None:
+            return board, False, ""
+        if result == 0:
+            return board, True, "It's a draw!"
+        if result == 1:
+            return board, True, "Black wins!"
+        return board, True, "White wins!"
 
     def reset_turn():
-        nonlocal current_move, move_phase, selections
-        current_move = {"transfer": {"source": None, "target": None}, "add": None}
-        move_phase = "none"
-        selections = {"transfer_source": None, "transfer_target": None, "add": None}
+        game["move"] = {"transfer": {"source": None, "target": None}, "add": None}
+        game["phase"] = "none"
+        game["selections"] = {"transfer_source": None, "transfer_target": None, "add": None}
 
-    # Confirmation dialog callbacks.
+    def stop_search():
+        game["busy"] = False
+        game["busy_kind"] = ""
+        game["pending"] = None
+        editor["busy"] = False
+
+    def switch_mode(new_mode):
+        nonlocal mode_state
+        mode_state = new_mode
+
+    # ---------------- Menu panel ----------------
+    menu_panel = Panel(menu_rect)
+    menu_panel.add_row(40, [(Label("Game Settings", title_font), 0, None, None)])
+    menu_panel.add_row(32, [
+        (Label("Grid Size:", body_font), 0, None, None),
+        (grid_size_box, None, 62, 32),
+        (Label("(1-8)", small_font), None, None, None),
+    ])
+    menu_panel.add_row(28, [(transfer_checkbox, 0, None, None)])
+    menu_panel.add_row(24, [(Label("Rotation:", body_font), 0, None, None)])
+    for radio in rotation_group:
+        menu_panel.add_row(22, [(radio, 0, None, None)])
+    menu_panel.add_row(24, [(Label("Game Mode:", body_font), 0, None, None)])
+    for radio in mode_group:
+        menu_panel.add_row(22, [(radio, 0, None, None)])
+    menu_panel.add_row(24, [(Label("Computer Engine:", body_font), 0, None, None)])
+    for radio in engine_group:
+        menu_panel.add_row(22, [(radio, 0, None, None)])
+    menu_panel.add_row(32, [
+        (Label("Search time (s):", body_font), 0, None, None),
+        (time_limit_box, None, 72, 32),
+    ])
+    menu_panel.add_row(24, [(Label("Move Completion:", body_font), 0, None, None)])
+    for radio in completion_group:
+        menu_panel.add_row(22, [(radio, 0, None, None)])
+    start_button = Button(0, 46, heading_font.get_height(), "Start")
+    menu_panel.add_row(50, [(start_button, 0, FILL, 46)])
+
+    # ---------------- Position editor panel ----------------
+    editor_hint = TextPanel(0, 46, small_font, scrollable=False, background=(240, 240, 244))
+    editor_piece_group = radio_group(body_font.get_height(),
+                                     ["Empty", "Black", "White"], default=1)
+    editor_turn_group = radio_group(body_font.get_height(), ["Black", "White"])
+    editor_opponent_group = radio_group(body_font.get_height(),
+                                        ["2 Players", "Vs Computer"], default=1)
+    editor_opponent_computer = editor_opponent_group[1]
+    editor_engine_label = Label("Engine:", small_font)
+    editor_apply_button = Button(70, 30, body_font.get_height(), "Apply")
+    editor_ask_button = Button(0, 46, heading_font.get_height(), "Ask Computer")
+    editor_clear_button = Button(160, 32, body_font.get_height(), "Clear Board")
+    editor_play_button = Button(0, 32, body_font.get_height(), "Play This Position")
+    editor_report = TextPanel(0, 150, small_font, title="Report")
+
+    editor_panel = Panel(menu_rect)
+    editor_panel.add_row(38, [(Label("Position Editor", title_font), 0, None, None)])
+    editor_panel.add_row(editor_hint.rect.height, [(editor_hint, 0, FILL, editor_hint.rect.height)])
+    editor_panel.add_row(32, [
+        (Label("Grid:", body_font), 0, None, None),
+        (grid_size_box, None, 62, 32),
+        (editor_apply_button, None, 70, 30),
+    ])
+    editor_panel.add_row(24, [(Label("Piece to place:", body_font), 0, None, None)])
+    for radio in editor_piece_group:
+        editor_panel.add_row(22, [(radio, 0, None, None)])
+    editor_panel.add_row(24, [(Label("Player to move:", body_font), 0, None, None)])
+    for radio in editor_turn_group:
+        editor_panel.add_row(22, [(radio, 0, None, None)])
+    editor_panel.add_row(24, [(Label("Play this position:", body_font), 0, None, None)])
+    for index, radio in enumerate(editor_opponent_group):
+        editor_panel.add_row(22, [(radio, 0 if index == 0 else 90, None, None)])
+    editor_panel.add_row(24, [(Label("Rotation:", body_font), 0, None, None)])
+    for radio in rotation_group:
+        editor_panel.add_row(22, [(radio, 0, None, None)])
+    editor_panel.add_row(26, [(transfer_checkbox, 0, None, None)])
+    editor_panel.add_row(20, [(editor_engine_label, 0, FILL, None)])
+    editor_panel.add_row(46, [(editor_ask_button, 0, FILL, 46)])
+    editor_panel.add_row(32, [
+        (editor_clear_button, 0, 160, 32),
+        (editor_play_button, None, FILL, 32),
+    ])
+    editor_panel.add_row(0, [(editor_report, 0, FILL, 0)], fill=True)
+
+    # ---------------- Playing panel ----------------
+    play_status_label = Label("", huge_font)
+    play_message = TextPanel(0, 74, small_font, title="Computer", scrollable=False,
+                             background=(240, 240, 244))
+    play_hint_button = Button(0, 40, body_font.get_height(), "Hint (ask the computer)")
+    play_take_back_button = Button(0, 40, body_font.get_height(), "Take Back")
+    play_complete_button = Button(0, 40, body_font.get_height(), "Complete Move")
+    play_restart_button = Button(0, 40, body_font.get_height(), "Restart")
+    play_new_game_button = Button(0, 40, body_font.get_height(), "New Game")
+    play_log = TextPanel(0, 120, small_font, title="Moves")
+
+    play_panel = Panel(menu_rect)
+    play_panel.add_row(44, [(play_status_label, 0, FILL, None)])
+    play_panel.add_row(play_message.rect.height, [(play_message, 0, FILL, play_message.rect.height)])
+    play_panel.add_row(40, [(play_hint_button, 0, FILL, 40)])
+    play_panel.add_row(40, [(play_take_back_button, 0, FILL, 40)])
+    play_panel.add_row(40, [(play_complete_button, 0, FILL, 40)])
+    play_panel.add_row(40, [(play_restart_button, 0, FILL, 40)])
+    play_panel.add_row(40, [(play_new_game_button, 0, FILL, 40)])
+    play_panel.add_row(0, [(play_log, 0, FILL, 0)], fill=True)
+
+    status_panel = TextPanel(board_width, STATUS_HEIGHT, small_font,
+                             background=(240, 240, 243), scrollable=False)
+    status_panel.rect = pygame.Rect(status_rect)
+
+    # ---------------- Confirmation dialog ----------------
+    dialog_rect = pygame.Rect(WINDOW_WIDTH // 2 - 170, WINDOW_HEIGHT // 2 - 90, 340, 180)
+    dialog_title = Label("", heading_font)
+    dialog_yes_button = Button(120, 44, body_font.get_height(), "Yes")
+    dialog_no_button = Button(120, 44, body_font.get_height(), "No")
+    dialog = {"active": False, "action": None}
+
+    def place_dialog_widgets():
+        dialog_title.rect.topleft = (dialog_rect.x + 22, dialog_rect.y + 40)
+        dialog_yes_button.rect.topleft = (dialog_rect.x + 34, dialog_rect.y + 118)
+        dialog_no_button.rect.topleft = (dialog_rect.x + 186, dialog_rect.y + 118)
+
+    place_dialog_widgets()
+
+    # ---------------- Computer engine ----------------
+    engine_process = engine.EngineProcess()
+
+    def make_request(state, player, config):
+        """Build a picklable engine request out of the current settings."""
+        return dict(
+            state=[[int(value) for value in row] for row in state],
+            player_turn=int(player),
+            rotation=current_rotation(),
+            transfer_allowed=bool(transfer_checkbox.checked),
+            time_limit=read_time_limit(),
+            **config,
+        )
+
+    def poll_engine():
+        """Collect a finished answer from the engine process and use it."""
+        result = engine_process.take_result()
+        if result is None:
+            return
+        if game["busy"]:
+            kind, game["busy_kind"] = game["busy_kind"], ""
+            game["busy"] = False
+            if time.monotonic() - game["busy_since"] < MIN_THINK_TIME:
+                # hold a fast answer back so that the computer does not look instant
+                game["pending"] = (result, time.monotonic(), kind)
+            elif kind == "hint":
+                apply_hint(result)
+            else:
+                apply_computer_move(result)
+        elif editor["busy"]:
+            editor["busy"] = False
+            apply_editor_answer(result)
+        flush_pending()
+
+    def flush_pending():
+        """Use a computer answer that was held back to keep the game readable."""
+        if game["pending"] is None:
+            return
+        result, arrived, kind = game["pending"]
+        if time.monotonic() - arrived < MIN_THINK_TIME:
+            return
+        game["pending"] = None
+        if kind == "hint":
+            apply_hint(result)
+        else:
+            apply_computer_move(result)
+
+    # ---------------- Game actions ----------------
+    def append_log(move, player):
+        game["log"].append(f"{len(game['log']) + 1}. {PLAYER_NAMES[player]}: "
+                           f"{engine.move_to_text(move)}")
+        play_log.set_text("\n".join(game["log"]))
+        play_log.scroll_to_end()
+
+    def play_move(move, player):
+        """Play a move for a player and update the game status and log."""
+        board = olgf.play_turn(game["board"], move)
+        if np.array_equal(board, game["board"]):
+            game["message_line"] = "That move is not legal, try again."
+            return False
+        game["board"] = board
+        game["board"], game["over"], game["message"] = evaluate_position(board)
+        game["blocked"] = False
+        append_log(move, player)
+        game["player"] = 3 - player
+        reset_turn()
+        return True
+
+    def complete_move():
+        """Play the move that was assembled with the mouse."""
+        if game["phase"] != "add_move" or game["move"]["add"] is None:
+            return
+        move = {"player": game["player"], "transfer": None,
+                "add": game["move"]["add"], "rotate": current_rotation()}
+        source = game["move"]["transfer"]["source"]
+        target = game["move"]["transfer"]["target"]
+        if transfer_checkbox.checked and source is not None and target is not None:
+            if target[0] - source[0] == -1:
+                direction = "u"
+            elif target[0] - source[0] == 1:
+                direction = "d"
+            elif target[1] - source[1] == -1:
+                direction = "l"
+            else:
+                direction = "r"
+            move["transfer"] = [source, direction]
+        game["hint"] = None
+        play_move(move, game["player"])
+
+    def take_back():
+        """Undo the last step of the move that is being assembled."""
+        if game["move"]["add"] is not None:
+            game["move"]["add"] = None
+            game["selections"]["add"] = None
+            if transfer_checkbox.checked and game["move"]["transfer"]["target"] is not None:
+                game["phase"] = "transfer_target"
+            else:
+                game["phase"] = "none"
+        elif game["move"]["transfer"]["target"] is not None:
+            game["move"]["transfer"]["target"] = None
+            game["selections"]["transfer_target"] = None
+            game["phase"] = "transfer_target"
+        elif game["move"]["transfer"]["source"] is not None:
+            game["move"]["transfer"]["source"] = None
+            game["selections"]["transfer_source"] = None
+            game["phase"] = "none"
+
+    def start_game():
+        """Leave the menu: either open the editor or start a fresh game."""
+        size = read_grid_size()
+        stop_search()
+        if mode_editor.selected:
+            editor["board"] = resize_board(editor["board"], size)
+            switch_mode("editor")
+            return
+        game["board"] = np.zeros((size, size), dtype=int)
+        game["player"] = 1
+        game["log"] = []
+        game["message_line"] = ""
+        game["hint"] = None
+        game["blocked"] = False
+        game["vs_computer"] = mode_computer.selected
+        play_log.clear()
+        reset_turn()
+        game["board"], game["over"], game["message"] = evaluate_position(game["board"])
+        switch_mode("playing")
+
+    def restart_game():
+        """Start the current game again from an empty board."""
+        stop_search()
+        size = game["board"].shape[0]
+        game["board"] = np.zeros((size, size), dtype=int)
+        game["player"] = 1
+        game["log"] = []
+        game["message_line"] = ""
+        game["hint"] = None
+        game["blocked"] = False
+        play_log.clear()
+        reset_turn()
+        game["board"], game["over"], game["message"] = evaluate_position(game["board"])
+
+    def request_computer_move():
+        """Let the computer answer for the side to move."""
+        if game["busy"] or game["over"] or game["blocked"] or game["pending"] is not None:
+            return
+        if not vs_computer() or game["player"] != 2:
+            return
+        if not engine_process.submit(make_request(game["board"], game["player"], engine_config())):
+            return
+        game["busy"] = True
+        game["busy_kind"] = "computer"
+        game["busy_since"] = time.monotonic()
+        game["message_line"] = "White is thinking..."
+
+    def apply_computer_move(result):
+        game["message_line"] = result["message"]
+        if result["move"] is None:
+            game["blocked"] = True
+            return
+        game["hint"] = None
+        play_move(result["move"], game["player"])
+
+    def request_hint():
+        """Ask the computer which move the human should play."""
+        if game["busy"] or game["over"] or game["pending"] is not None:
+            return
+        if not engine_process.submit(make_request(
+                game["board"], game["player"],
+                {"use_tablebase": True, "fallback": engine.FALLBACK_SEARCH})):
+            return
+        game["busy"] = True
+        game["busy_kind"] = "hint"
+        game["busy_since"] = time.monotonic()
+        game["message_line"] = f"{PLAYER_NAMES[game['player']]} is asking the computer..."
+
+    def apply_hint(result):
+        game["message_line"] = result["message"]
+        game["hint"] = result["move"]
+
+    def open_dialog(action):
+        dialog["active"] = True
+        dialog["action"] = action
+
     def confirm_yes():
-        nonlocal confirm_box_active, confirm_action
-        if confirm_action == "restart":
+        action = dialog["action"]
+        dialog["active"] = False
+        dialog["action"] = None
+        if action == "restart":
             restart_game()
-        elif confirm_action == "new_game":
-            switch_to_menu()
-        confirm_box_active = False
-        confirm_action = None
+        elif action == "new_game":
+            stop_search()
+            switch_mode("menu")
 
     def confirm_no():
-        nonlocal confirm_box_active, confirm_action
-        confirm_box_active = False
-        confirm_action = None
+        dialog["active"] = False
+        dialog["action"] = None
 
-    def handle_resize(new_width, new_height):
-        pass
+    # ---------------- Editor actions ----------------
+    def reset_editor():
+        editor["suggestion"] = None
+        editor_report.set_text('Draw a position and press "Ask Computer".\n\n' + EDITOR_HELP)
 
-    # Create confirmation dialog buttons.
-    confirm_yes_button = Button(confirm_box_rect.x + 30, confirm_box_rect.y + 140, 100, 40, Button_font, "Yes", confirm_yes)
-    confirm_no_button = Button(confirm_box_rect.x + 170, confirm_box_rect.y + 140, 100, 40, Button_font, "No", confirm_no)
+    def selected_piece():
+        return PIECE_VALUES[next(radio.text for radio in editor_piece_group if radio.selected)]
 
-    # ---------------- Main Loop ----------------
+    def apply_editor_size():
+        size = read_grid_size()
+        editor["board"] = resize_board(editor["board"], size)
+        grid_size_box.set_text(str(size))
+        reset_editor()
+
+    def clear_editor():
+        editor["board"] = np.zeros(editor["board"].shape, dtype=int)
+        reset_editor()
+
+    def play_editor_position():
+        """Start a game that begins from the drawn position."""
+        stop_search()
+        game["board"] = editor["board"].copy()
+        game["player"] = editor["player"]
+        game["message"] = ""
+        game["log"] = []
+        game["message_line"] = ""
+        game["hint"] = None
+        game["blocked"] = False
+        game["vs_computer"] = editor_opponent_computer.selected
+        play_log.clear()
+        reset_turn()
+        game["board"], game["over"], game["message"] = evaluate_position(game["board"])
+        switch_mode("playing")
+
+    def request_editor_answer():
+        """Ask the engine for the best move in the drawn position."""
+        if editor["busy"]:
+            return
+        if not engine_process.submit(make_request(
+                editor["board"], editor["player"], engine_config())):
+            return
+        editor["busy"] = True
+        editor["busy_since"] = time.monotonic()
+        editor["suggestion"] = None
+        editor_report.set_text("Asking the computer, please wait...")
+
+    def apply_editor_answer(result):
+        editor["suggestion"] = result["move"]
+        report = result["message"]
+        if result.get("text"):
+            report += "\n\n" + result["text"]
+        elif result["source"] == engine.SOURCE_SEARCH and result.get("search"):
+            report += "\n\nBest moves found:\n"
+            for move, value in result["search"]["top_moves"]:
+                report += f"  {engine.move_to_text(move)} (score {value})\n"
+        editor_report.set_text(report)
+        editor_report.scroll = 0
+
+    def editor_click(cell, button):
+        if cell is None:
+            return
+        row, col = cell
+        if button == 3:
+            value = 0
+        elif button == 2:
+            value = 3 - selected_piece()
+        else:
+            value = selected_piece()
+        if editor["board"][row, col] != value:
+            editor["board"][row, col] = value
+            reset_editor()
+
+    def handle_board_click(event, hover_cell):
+        """Build a move with the mouse on the board of a running game."""
+        if event.type != pygame.MOUSEBUTTONDOWN or event.button != 1:
+            return
+        if game["over"] or hover_cell is None:
+            return
+        if vs_computer() and game["player"] != 1:
+            return
+        row, col = hover_cell
+        board = game["board"]
+        if transfer_checkbox.checked and game["phase"] == "none" \
+                and board[row, col] == 3 - game["player"]:
+            game["move"]["transfer"]["source"] = (row, col)
+            game["selections"]["transfer_source"] = (row, col)
+            game["phase"] = "transfer_target"
+        elif game["phase"] == "transfer_target":
+            source = game["move"]["transfer"]["source"]
+            if ((abs(row - source[0]) == 1 and col == source[1])
+                    or (abs(col - source[1]) == 1 and row == source[0])):
+                if board[row, col] == 0:
+                    game["move"]["transfer"]["target"] = (row, col)
+                    game["selections"]["transfer_target"] = (row, col)
+                    game["phase"] = "add_move"
+        elif game["phase"] in ("none", "add_move"):
+            source = game["move"]["transfer"]["source"]
+            if board[row, col] == 0 or (transfer_checkbox.checked
+                                        and source is not None and (row, col) == source):
+                game["move"]["add"] = (row, col)
+                game["selections"]["add"] = (row, col)
+                game["phase"] = "add_move"
+                if next(radio.text for radio in completion_group
+                        if radio.selected) == "Auto Move Completion":
+                    complete_move()
+
+    def handle_editor_click(event, hover_cell):
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button in (1, 2, 3):
+            editor_click(hover_cell, event.button)
+
+    # ---------------- Widget callbacks ----------------
+    start_button.callback = start_game
+    play_complete_button.callback = complete_move
+    play_take_back_button.callback = take_back
+    play_restart_button.callback = lambda: open_dialog("restart")
+    play_new_game_button.callback = lambda: open_dialog("new_game")
+    play_hint_button.callback = request_hint
+    editor_apply_button.callback = apply_editor_size
+    editor_ask_button.callback = request_editor_answer
+    editor_clear_button.callback = clear_editor
+    editor_play_button.callback = play_editor_position
+    dialog_yes_button.callback = confirm_yes
+    dialog_no_button.callback = confirm_no
+
+    def handle_resize(width, height):
+        """Follow the window size: the board stays square, the panel is the rest."""
+        nonlocal board_rect, status_rect, menu_rect, dialog_rect
+        size = max(200, min(width - menu_width, height - 120))
+        board_rect = pygame.Rect(0, 0, size, size)
+        status_rect = pygame.Rect(0, size, size, max(60, height - size))
+        menu_rect = pygame.Rect(size, 0, max(200, width - size), height)
+        menu_panel.rect = pygame.Rect(menu_rect)
+        editor_panel.rect = pygame.Rect(menu_rect)
+        play_panel.rect = pygame.Rect(menu_rect)
+        status_panel.rect = pygame.Rect(status_rect)
+        dialog_rect = pygame.Rect(width // 2 - 170, height // 2 - 90, 340, 180)
+        place_dialog_widgets()
+        for panel in (menu_panel, editor_panel, play_panel):
+            panel.layout()
+
+    # ---------------- Drawing ----------------
+    def rules_text():
+        return (f"rotation: {current_rotation()}, transfers: "
+                f"{'allowed' if transfer_checkbox.checked else 'not allowed'}")
+
+    def tablebase_text():
+        if not tablebase_sizes:
+            return "tablebase: not generated"
+        return "tablebase: " + ", ".join(f"{size}x{size}" for size in tablebase_sizes)
+
+    def cell_text(hover_cell):
+        if hover_cell is None:
+            return f"Legend: {PLAYER_SYMBOLS[1]} = Black, {PLAYER_SYMBOLS[2]} = White."
+        return f"Cell: ({hover_cell[0]}, {hover_cell[1]})   " \
+               f"Legend: {PLAYER_SYMBOLS[1]} = Black, {PLAYER_SYMBOLS[2]} = White."
+
+    def draw_status(text):
+        status_panel.set_text(text)
+
+    def draw_playing(screen, hover_cell):
+        highlights = selection_highlights(game["selections"])
+        if game["hint"] is not None:
+            highlights += move_highlights(game["hint"])
+        winning = find_winning_lines(game["board"]) if game["over"] else ()
+        draw_board(screen, game["board"], board_rect, hover_cell, highlights, winning)
+
+        if game["over"]:
+            play_status_label.set_text(game["message"])
+        else:
+            play_status_label.set_text(f"Turn: {PLAYER_NAMES[game['player']]}")
+        if game["busy"]:
+            play_message.set_text(
+                f"{PLAYER_NAMES[game['player']]} is thinking... "
+                f"{time.monotonic() - game['busy_since']:.1f}s")
+        else:
+            play_message.set_text(game["message_line"])
+        play_panel.draw(screen)
+        size = game["board"].shape[0]
+        draw_status(
+            f"Playing a {size}x{size} game"
+            f"{' against the computer' if vs_computer() else ' with two players'}"
+            f"  |  {rules_text()}\n"
+            f"{tablebase_text()}\n"
+            f"{cell_text(hover_cell)}"
+        )
+
+    def draw_editor(screen, hover_cell):
+        highlights = move_highlights(editor["suggestion"])
+        winning = find_winning_lines(editor["board"])
+        draw_board(screen, editor["board"], board_rect, hover_cell, highlights, winning)
+        editor_engine_label.set_text(engine_config_text())
+        editor_hint.set_text(EDITOR_HELP)
+        editor_panel.draw(screen)
+        size = editor["board"].shape[0]
+        if editor["busy"]:
+            note = f"The computer is thinking... {time.monotonic() - editor['busy_since']:.1f}s"
+        else:
+            note = f"{size}x{size} grid, {PLAYER_NAMES[editor['player']]} to move."
+        draw_status(
+            f"Position editor  |  {rules_text()}\n"
+            f"{note}\n"
+            f"{tablebase_text()}\n"
+            f"{cell_text(hover_cell)}"
+        )
+
+    def draw_menu(screen):
+        pygame.draw.rect(screen, PANEL_COLOR, menu_rect)
+        menu_panel.draw(screen)
+        draw_status(
+            "Choose the settings on the right and press Start.\n"
+            "Position Editor lets you draw a position and ask the computer for "
+            "the best move in it.\n"
+            f"{tablebase_text()}\n"
+            f"Legend: {PLAYER_SYMBOLS[1]} = Black, {PLAYER_SYMBOLS[2]} = White."
+        )
+
+    def draw_mode(screen, hover_cell):
+        if mode_state == "playing":
+            draw_playing(screen, hover_cell)
+        elif mode_state == "editor":
+            draw_editor(screen, hover_cell)
+        else:
+            draw_menu(screen)
+
+    def draw_dialog():
+        pygame.draw.rect(screen, (185, 185, 190), dialog_rect)
+        pygame.draw.rect(screen, (0, 0, 0), dialog_rect, 2)
+        if dialog["action"] == "restart":
+            dialog_title.set_text("Restart game?")
+        else:
+            dialog_title.set_text("Return to main menu?")
+        dialog_title.draw(screen)
+        dialog_yes_button.draw(screen)
+        dialog_no_button.draw(screen)
+
+    # ---------------- Panels and initial texts ----------------
+    for panel in (menu_panel, editor_panel, play_panel):
+        panel.layout()
+    reset_editor()
+    play_log.clear()
+    status_panel.set_text(
+        "Choose the settings on the right and press Start.\n"
+        f"{tablebase_text()}."
+    )
+
+    # ---------------- Main loop ----------------
     running = True
     while running:
         mouse_pos = pygame.mouse.get_pos()
-        hover_cell = None
-        board_rect = pygame.Rect(0, 0, BOARD_WIDTH, BOARD_HEIGHT)
-        if board_state is not None and board_rect.collidepoint(mouse_pos):
-            rows, cols = board_state.shape
-            cell_w = board_rect.width // cols
-            cell_h = board_rect.height // rows
-            col = (mouse_pos[0] - board_rect.x) // cell_w
-            row = (mouse_pos[1] - board_rect.y) // cell_h
-            hover_cell = (row, col)
+        if mode_state == "playing":
+            active_board = game["board"]
+        elif mode_state == "editor":
+            active_board = editor["board"]
+        else:
+            active_board = None
+        hover_cell = cell_at(mouse_pos, board_rect, active_board)
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-            elif event.type == pygame.VIDEORESIZE:
-                handle_resize(event.w, event.h)
-
-            # If confirmation dialog is active, only process its events.
-            if confirm_box_active:
-                confirm_yes_button.handle_event(event)
-                confirm_no_button.handle_event(event)
                 continue
-
+            if event.type == pygame.VIDEORESIZE:
+                handle_resize(event.w, event.h)
+                continue
+            if dialog["active"]:
+                dialog_yes_button.handle_event(event)
+                dialog_no_button.handle_event(event)
+                continue
             if mode_state == "menu":
-                grid_size_box.handle_event(event)
-                transfer_checkbox.handle_event(event)
-                rotation_checkbox.handle_event(event)
-                rb_game1.handle_event(event, [rb_game1, rb_game2])
-                rb_game2.handle_event(event, [rb_game1, rb_game2])
-                rb_move1.handle_event(event, [rb_move1, rb_move2])
-                rb_move2.handle_event(event, [rb_move1, rb_move2])
-                start_button.handle_event(event)
+                menu_panel.handle_event(event)
             elif mode_state == "playing":
-                # Only process board moves if the game is not over.
-                if event.type == pygame.MOUSEBUTTONDOWN:
-                    if not game_over and board_rect.collidepoint(event.pos):
-                        cell_w = board_rect.width // board_state.shape[1]
-                        cell_h = board_rect.height // board_state.shape[0]
-                        col = (event.pos[0] - board_rect.x) // cell_w
-                        row = (event.pos[1] - board_rect.y) // cell_h
-                        if (game_mode_choice == "2 Players") or (game_mode_choice == "Vs Computer" and current_player == 1):
-                            if transfer_allowed and move_phase == "none" and board_state[row, col] == 3 - current_player:
-                                current_move["transfer"]["source"] = (row, col)
-                                selections["transfer_source"] = (row, col)
-                                move_phase = "transfer_target"
-                            elif move_phase == "transfer_target":
-                                src = current_move["transfer"]["source"]
-                                if (abs(row - src[0]) == 1 and col == src[1]) or (abs(col - src[1]) == 1 and row == src[0]):
-                                    if board_state[row, col] == 0:
-                                        current_move["transfer"]["target"] = (row, col)
-                                        selections["transfer_target"] = (row, col)
-                                        move_phase = "add_move"
-                            elif move_phase in ["none", "add_move"]:
-                                # Allow add move even if clicking on the transfer source cell.
-                                if board_state[row, col] == 0 or (transfer_allowed and current_move["transfer"]["source"] is not None and (row, col) == current_move["transfer"]["source"]):
-                                    current_move["add"] = (row, col)
-                                    selections["add"] = (row, col)
-                                    move_phase = "add_move"
-                                    if move_completion_mode == "auto":
-                                        complete_move()
-                # Always handle the in-game buttons.
-                take_back_button.handle_event(event)
-                complete_move_button.handle_event(event)
-                restart_button.handle_event(event)
-                new_game_button.handle_event(event)
+                play_panel.handle_event(event)
+                handle_board_click(event, hover_cell)
+            else:
+                editor_panel.handle_event(event)
+                handle_editor_click(event, hover_cell)
 
-        if mode_state == "playing" and not game_over and game_mode_choice == "Vs Computer" and current_player == 2:
-            best_move, score = find_best_move(board_state, rotate_direction, transfer_allowed, current_player)
-            if best_move is not None:
-                board_state = play_turn(board_state, best_move)
-                result = evaluate_game_state(board_state)
-                if result is None and not np.any(board_state == 0):
-                    result = 0
-                if result is not None:
-                    game_over = True
-                    if result == 0:
-                        game_message = "It's a draw!"
-                    elif result == 1:
-                        game_message = "Black wins!"
-                    elif result == 2:
-                        game_message = "White wins!"
-                else:
-                    current_player = 3 - current_player
-                reset_turn()
-                pygame.time.delay(300)
+        poll_engine()
+        if mode_state == "playing" and not game["over"] and vs_computer() and game["player"] == 2:
+            request_computer_move()
+        flush_pending()
 
         # --------------------- Drawing ---------------------
         screen.fill((200, 200, 200))
-        if mode_state == "menu":
-            pygame.draw.rect(screen, (220, 220, 220), (BOARD_WIDTH, 0, MENU_WIDTH, WINDOW_HEIGHT))
-            title_surface = menu_title_font.render("Game Settings", True, pygame.Color('black'))
-            screen.blit(title_surface, (menu_start_x, title_y))
-            grid_label = menu_options_font.render("Grid Size:", True, pygame.Color('black'))
-            screen.blit(grid_label, (menu_start_x, grid_label_y))
-            grid_size_box.draw(screen)
-            transfer_checkbox.draw(screen)
-            rotation_checkbox.draw(screen)
-            game_mode_label = menu_options_font.render("Game Mode:", True, pygame.Color('black'))
-            screen.blit(game_mode_label, (menu_start_x, game_mode_label_y))
-            rb_game1.draw(screen)
-            rb_game2.draw(screen)
-            move_mode_label = menu_options_font.render("Move Completion:", True, pygame.Color('black'))
-            screen.blit(move_mode_label, (menu_start_x, move_mode_label_y))
-            rb_move1.draw(screen)
-            rb_move2.draw(screen)
-            start_button.draw(screen)
-        elif mode_state == "playing":
-            draw_board(screen, board_state, board_rect, hover_cell, selections, menu_options_font)
-            pygame.draw.rect(screen, (220, 220, 220), (BOARD_WIDTH, 0, MENU_WIDTH, WINDOW_HEIGHT))
-            if game_over:
-                info_text = game_message
-                info_surface = game_mode_font.render(info_text, True, pygame.Color('black'))
-                screen.blit(info_surface, (menu_start_x, BOARD_HEIGHT - 40))
-            else:
-                info_text = "Turn: Black" if current_player == 1 else "Turn: White"
-                info_surface = game_mode_font.render(info_text, True, pygame.Color('black'))
-                screen.blit(info_surface, (menu_start_x, 20))
-            # Always show Restart, New Game, Take Back, and Complete Move buttons.
-            restart_button.draw(screen)
-            new_game_button.draw(screen)
-            take_back_button.draw(screen)
-            complete_move_button.draw(screen)
-        
-        # Draw confirmation dialog if active.
-        if confirm_box_active:
-            pygame.draw.rect(screen, (180, 180, 180), confirm_box_rect)
-            pygame.draw.rect(screen, (0, 0, 0), confirm_box_rect, 2)
-            confirm_text = ""
-            if confirm_action == "restart":
-                confirm_text = "Restart game?"
-            elif confirm_action == "new_game":
-                confirm_text = "Return to main menu?"
-            confirm_surface = menu_options_font.render(confirm_text, True, pygame.Color('black'))
-            screen.blit(confirm_surface, (confirm_box_rect.x + 20, confirm_box_rect.y + 40))
-            confirm_yes_button.draw(screen)
-            confirm_no_button.draw(screen)
-
+        draw_mode(screen, hover_cell)
+        status_panel.draw(screen)
+        if dialog["active"]:
+            draw_dialog()
         pygame.display.flip()
-        clock.tick(30)
+        clock.tick(60)
 
+    engine_process.shutdown()
     pygame.quit()
     sys.exit()
+
 
 if __name__ == '__main__':
     main()

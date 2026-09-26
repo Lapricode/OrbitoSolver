@@ -14,6 +14,7 @@ import solve_game
 
 POSITION_NOT_FOUND = "Position is not in the tablebase."
 _DEFAULT_PLAYER_SYMBOLS = {0: "_", 1: "x", 2: "o"}
+_records_cache = {}   # (path, mtime, size) -> list of records
 _ROTATION_ALIASES = {
     "clockwise": "clockwise",
     "cw": "clockwise",
@@ -108,6 +109,31 @@ def _record_path(base_dir, state, rotate_direction, transfer_allowed, player_tur
     )
 
 
+def _load_records(file_path):
+    """Read (and cache) the JSON array stored in ``file_path``.
+
+    The cache key includes the file modification time and size, so a
+    regenerated tablebase is picked up without restarting the program.
+    """
+    try:
+        stat = os.stat(file_path)
+        key = (file_path, stat.st_mtime, stat.st_size)
+    except OSError:
+        return None
+    records = _records_cache.get(key)
+    if records is None:
+        try:
+            with open(file_path, "r", encoding="utf-8") as file:
+                records = json.load(file)
+        except (OSError, json.JSONDecodeError):
+            return None
+        if not isinstance(records, list):
+            return None
+        _records_cache.clear()
+        _records_cache[key] = records
+    return records
+
+
 def _find_record(base_dir, state, rotate_direction, transfer_allowed, player_turn):
     file_path = _record_path(
         base_dir,
@@ -116,15 +142,8 @@ def _find_record(base_dir, state, rotate_direction, transfer_allowed, player_tur
         transfer_allowed,
         player_turn,
     )
-    if not os.path.isfile(file_path):
-        return None
-
-    try:
-        with open(file_path, "r", encoding="utf-8") as file:
-            records = json.load(file)
-    except (OSError, json.JSONDecodeError):
-        return None
-    if not isinstance(records, list):
+    records = _load_records(file_path)
+    if records is None:
         return None
 
     position_id = tablebase.get_position_id(
@@ -303,24 +322,17 @@ def _format_solution(
     return "\n".join(lines).rstrip()
 
 
-def get_solution(
+def _normalise_lookup(
     state,
     player_turn,
-    rotate_direction="clockwise",
-    transfer_allowed=True,
-    base_dir=None,
-    grid_size=None,
-    players_symbols=None,
-    tablebase_type="compressed",
+    rotate_direction,
+    transfer_allowed,
+    base_dir,
+    grid_size,
+    players_symbols,
+    tablebase_type,
 ):
-    """Return a formatted solution or POSITION_NOT_FOUND.
-
-    ``state`` is a row-major string such as ``"0120"`` or an array-like
-    object. When ``grid_size`` is omitted, it is inferred from the state
-    length. The compressed tablebase is used by default. The returned text
-    follows the game, rules, and perfect-play evolution format used by
-    ``solve_game.py``.
-    """
+    """Validate the lookup parameters shared by the public entry points."""
     state_array = _state_from_input(state, grid_size)
     player = _normalise_player(player_turn)
     rotation = _normalise_rotation(rotate_direction)
@@ -330,6 +342,53 @@ def get_solution(
     symbols = dict(_DEFAULT_PLAYER_SYMBOLS if players_symbols is None else players_symbols)
     if any(symbol not in symbols for symbol in (0, 1, 2)):
         raise ValueError("players_symbols must define symbols for 0, 1, and 2")
+    return state_array, player, rotation, transfer, base_dir, symbols
+
+
+def lookup_solution(
+    state,
+    player_turn,
+    rotate_direction="clockwise",
+    transfer_allowed=True,
+    base_dir=None,
+    grid_size=None,
+    players_symbols=None,
+    tablebase_type="compressed",
+):
+    """Return a structured tablebase entry for a position, or None.
+
+    The returned dictionary always contains:
+
+    - ``state``: the queried position as a numpy array,
+    - ``player_turn``, ``rotation``, ``transfer_allowed``: the rule context,
+    - ``best_move``, ``moves_sequence``, ``states_sequence``, ``score`` and
+      ``game_result``: the stored solution, already mapped back to the
+      orientation and colours of the queried position,
+    - ``text``: the same formatted report returned by :func:`get_solution`.
+
+    ``score`` is always expressed from the point of view of ``player_turn``
+    (the player to move), and ``best_move`` is a move dictionary ready to be
+    passed to ``orbital_logic_game_functions.play_turn``. ``None`` is returned
+    when the position is not part of the selected tablebase.
+    """
+    (
+        state_array,
+        player,
+        rotation,
+        transfer,
+        base_dir,
+        symbols,
+    ) = _normalise_lookup(
+        state,
+        player_turn,
+        rotate_direction,
+        transfer_allowed,
+        base_dir,
+        grid_size,
+        players_symbols,
+        tablebase_type,
+    )
+    tablebase_type = tablebase.normalise_tablebase_type(tablebase_type)
 
     if tablebase_type == "compressed":
         representation = tablebase.compressed_representation(
@@ -354,7 +413,7 @@ def get_solution(
         lookup_player,
     )
     if record is None:
-        return POSITION_NOT_FOUND
+        return None
     if representation is not None:
         record = _map_compressed_record(
             record,
@@ -362,14 +421,91 @@ def get_solution(
             state_array,
             rotation,
         )
-    return _format_solution(
-        record,
-        state_array,
-        player,
-        rotation,
-        transfer,
-        symbols,
+
+    solution = record.get("solution", {})
+    moves_sequence = solution.get("moves_sequence")
+    if moves_sequence is None:
+        best_move = solution.get("best_move")
+        moves_sequence = [] if best_move is None else [best_move]
+    return {
+        "state": state_array,
+        "player_turn": player,
+        "rotation": rotation,
+        "transfer_allowed": transfer,
+        "base_dir": base_dir,
+        "tablebase_type": tablebase_type,
+        "id": record.get("id"),
+        "best_move": _move_for_engine(moves_sequence[0]) if moves_sequence else None,
+        "moves_sequence": [_move_for_engine(move) for move in moves_sequence],
+        "states_sequence": _state_sequence(record, state_array, moves_sequence),
+        "score": solution.get("score"),
+        "game_result": solution.get("game_result"),
+        "text": _format_solution(
+            record,
+            state_array,
+            player,
+            rotation,
+            transfer,
+            symbols,
+        ),
+    }
+
+
+def available_grid_sizes(base_dir=None, tablebase_type="compressed"):
+    """Return the sorted grid sizes that are available in a tablebase.
+
+    Used by graphical front-ends to tell the user up-front which board sizes
+    can be answered instantly from the tablebase. An empty list means that no
+    tablebase has been generated yet.
+    """
+    tablebase_type = tablebase.normalise_tablebase_type(tablebase_type)
+    base_dir = tablebase.default_base_dir(tablebase_type) if base_dir is None else base_dir
+    grid_sizes = []
+    try:
+        entries = os.listdir(base_dir)
+    except OSError:
+        return grid_sizes
+    for entry in entries:
+        size = entry.partition("x")[0]
+        if "x" not in entry or not size.isdigit() or int(size) < 1:
+            continue
+        if int(size) not in grid_sizes:
+            grid_sizes.append(int(size))
+    grid_sizes.sort()
+    return grid_sizes
+
+
+def get_solution(
+    state,
+    player_turn,
+    rotate_direction="clockwise",
+    transfer_allowed=True,
+    base_dir=None,
+    grid_size=None,
+    players_symbols=None,
+    tablebase_type="compressed",
+):
+    """Return a formatted solution or POSITION_NOT_FOUND.
+
+    ``state`` is a row-major string such as ``"0120"`` or an array-like
+    object. When ``grid_size`` is omitted, it is inferred from the state
+    length. The compressed tablebase is used by default. The returned text
+    follows the game, rules, and perfect-play evolution format used by
+    ``solve_game.py``.
+    """
+    entry = lookup_solution(
+        state,
+        player_turn,
+        rotate_direction=rotate_direction,
+        transfer_allowed=transfer_allowed,
+        base_dir=base_dir,
+        grid_size=grid_size,
+        players_symbols=players_symbols,
+        tablebase_type=tablebase_type,
     )
+    if entry is None:
+        return POSITION_NOT_FOUND
+    return entry["text"]
 
 
 def main(argv=None):
