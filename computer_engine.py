@@ -6,7 +6,8 @@ covers. When the position is missing, the caller decides what happens next:
 
 * :data:`FALLBACK_RANDOM` plays a uniformly random legal move,
 * :data:`FALLBACK_SEARCH` runs the iterative deepening minimax search from
-  ``solve_game`` for at most ``time_limit`` seconds,
+  ``solve_game`` for at most ``time_limit`` seconds and at most
+  :data:`MAX_SEARCH_DEPTH` moves of lookahead,
 * :data:`FALLBACK_NONE` reports that no move is available.
 
 The module has no GUI dependency, so its helpers can also be used from a
@@ -43,8 +44,9 @@ SOURCE_SEARCH = "search"
 SOURCE_NONE = "none"
 
 PLAYER_SYMBOLS = {0: "_", 1: "Black", 2: "White"}
-DEFAULT_TIME_LIMIT = 2.0
+DEFAULT_TIME_LIMIT = 3.0
 MAX_TIME_LIMIT = 600.0
+MAX_SEARCH_DEPTH = 100
 
 
 def default_tablebase_dir(tablebase_type=TABLEBASE_TYPE):
@@ -138,6 +140,7 @@ def choose_move(
     use_tablebase=USE_TABLEBASE,
     fallback=FALLBACK_RANDOM,
     time_limit=DEFAULT_TIME_LIMIT,
+    max_depth=MAX_SEARCH_DEPTH,
     base_dir=None,
     seed=None,
 ):
@@ -150,6 +153,10 @@ def choose_move(
     ``message`` and the ``elapsed`` search time in seconds. Tablebase answers
     additionally carry the full formatted perfect-play report in ``text`` and
     the whole evolution in ``moves_sequence`` / ``states_sequence``.
+
+    ``max_depth`` caps how far the minimax search may look, in moves; an
+    answer that comes from the deepest allowed search is reported as not
+    guaranteed, because the moves below the horizon were never examined.
     """
     state = np.asarray(state, dtype=int)
     if state.ndim != 2 or state.shape[0] != state.shape[1]:
@@ -218,6 +225,7 @@ def choose_move(
     limit = clamp_time_limit(time_limit)
     move, score, info = solve_game.find_best_move_within_time(
         state, rotation, transfer_allowed, player_turn, time_limit=limit,
+        max_depth=max_depth,
     )
     if move is None:
         return _result(
@@ -235,14 +243,22 @@ def choose_move(
     if depth == 0:
         message = (
             f"Minimax search could not finish the first iteration in {limit:g}s, "
-            f"playing the best ordered move: {move_to_text(move)}"
+            f"playing the best ordered move: {move_to_text(move)} "
+            f"(max depth {max_depth}; the result is not guaranteed)"
         )
     else:
         message += (
-            f" (depth {depth}, {info['nodes']} nodes, {info['elapsed']:.1f}s"
+            f" (depth {depth} of at most {max_depth}, {info['nodes']} nodes, "
+            f"{info['elapsed']:.1f}s"
             + (", timed out" if info["timed_out"] else "")
             + ")"
         )
+        if info["reason"] == "max_depth":
+            message += (
+                f"\nThe search reached the maximum depth of {max_depth} moves, so "
+                f"the result is not guaranteed: the moves below that depth were "
+                f"not examined."
+            )
     return _result(
         SOURCE_SEARCH,
         move=move,

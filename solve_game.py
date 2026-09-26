@@ -510,11 +510,16 @@ def _search_with_deadline(b, player, P, deadline, max_depth):
     Each iteration searches every root move to the same depth, so the move
     values of a single iteration are directly comparable; the values of the
     last *completed* iteration are the ones returned. Returns
-    (best_move, best_value, depth_reached, top_moves, timed_out)."""
+    (best_move, best_value, depth_reached, top_moves, timed_out, reason) with
+    ``reason`` telling why the deepening stopped: "max_depth" when the cap was
+    reached, "timeout" when the deadline cut an iteration short, "proven" when
+    the horizon already decided the result and "no_moves" when the root has
+    nothing left to try."""
     tt = {}
     ordered = _order_moves(_gen_moves(b, player, P[7], P[5], P[1]), b, player, P, None)
     best_move, best_value, best_depth, top_moves = ordered[0], None, 0, []
     timed_out = False
+    reason = "max_depth"
     depth = 1
     while max_depth is None or depth <= max_depth:
         scored = []
@@ -534,6 +539,7 @@ def _search_with_deadline(b, player, P, deadline, max_depth):
                 partial_value, partial_best = value, move
         if partial_timed_out:
             timed_out = True
+            reason = "timeout"
             if best_depth == 0 and partial_best is not None:
                 # the very first iteration was cut short: keep the best move
                 # that was fully evaluated (its score is not reported though)
@@ -541,14 +547,16 @@ def _search_with_deadline(b, player, P, deadline, max_depth):
                 top_moves = _best_scored(scored, TOP_MOVES)
             break
         if not scored:
+            reason = "no_moves"
             break
         best_move = max(scored, key=_scored_value)[1]
         best_value, best_depth = max(scored, key=_scored_value)[0], depth
         top_moves = _best_scored(scored, TOP_MOVES)
         if abs(best_value) >= WIN_SCORE - depth:
+            reason = "proven"
             break  # the horizon already proves the result
         depth += 1
-    return best_move, best_value, best_depth, top_moves, timed_out
+    return best_move, best_value, best_depth, top_moves, timed_out, reason
 
 
 def find_best_move_within_time(state, rotate_direction = "clockwise", transfer_allowed = True, player = 1, time_limit = 1.0, max_depth = None, top_moves_count = 5):
@@ -563,13 +571,16 @@ def find_best_move_within_time(state, rotate_direction = "clockwise", transfer_a
         transfer_allowed: whether transfers are allowed between adjacent cells
         player: the player whose move is chosen (1 or 2)
         time_limit: maximum thinking time in seconds (must be positive)
-        max_depth: optional cap on the searched depth in moves
+        max_depth: optional cap on the searched depth in moves; ``None`` means
+        the search is only bounded by ``time_limit``
         top_moves_count: how many alternatives to report in the info dictionary
     Returns:
         A tuple (best_move, best_value, info) where best_move is a move
         (a dictionary), best_value is its minimax evaluation (None when even the
         first iteration could not finish) and info is a dictionary with the
-        "depth", "nodes", "elapsed", "timed_out" and "top_moves" details.
+        "depth", "max_depth", "nodes", "elapsed", "timed_out", "reason" and
+        "top_moves" details. ``reason`` tells why the deepening stopped, so the
+        caller can warn when the answer comes from the deepest allowed search.
     """
     n = state.shape[0]
     time_limit = float(time_limit)
@@ -578,21 +589,24 @@ def find_best_move_within_time(state, rotate_direction = "clockwise", transfer_a
     P = _engine_params(n, rotate_direction, transfer_allowed)
     b = tuple(state.ravel().tolist())
     if not _gen_moves(b, player, P[7], P[5], P[1]):
-        return None, None, {"depth": 0, "nodes": 0, "elapsed": 0.0,
-                            "timed_out": False, "top_moves": []}
+        return None, None, {"depth": 0, "max_depth": max_depth, "nodes": 0,
+                            "elapsed": 0.0, "timed_out": False,
+                            "reason": "no_moves", "top_moves": []}
     start = time.monotonic()
     _start_search(start + time_limit)
     try:
-        best_move, best_value, depth, top_moves, timed_out = _search_with_deadline(
+        best_move, best_value, depth, top_moves, timed_out, reason = _search_with_deadline(
             b, player, P, start + time_limit, max_depth,
         )
     finally:
         nodes = _stop_search()
     info = {
         "depth": depth,
+        "max_depth": max_depth,
         "nodes": nodes,
         "elapsed": time.monotonic() - start,
         "timed_out": timed_out,
+        "reason": reason,
         "top_moves": [
             (_move_to_dict(move, player, rotate_direction, n), value)
             for value, move in top_moves[:top_moves_count]

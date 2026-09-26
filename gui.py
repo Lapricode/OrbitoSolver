@@ -56,10 +56,10 @@ MIN_THINK_TIME = 1.0
 # How a played move is shown: the transferred piece flies to its new cell while
 # the placed piece grows in, then the board turns and every piece slides to the
 # cell the rotation carries it to, see BoardAnimator and animated_pieces.
-MOVE_ANIMATION_DURATION = 0.45
-EDITOR_ANIMATION_DURATION = 0.20
+MOVE_ANIMATION_DURATION = 0.5
+EDITOR_ANIMATION_DURATION = 0.50
 ROTATION_ANIMATION_DURATION = 1.0
-TRANSFER_FLIGHT_END = 0.55  # share of the move spent flying, the rest lands
+TRANSFER_FLIGHT_END = 1.00  # share of the move spent flying, the rest lands
 ADD_FADE_START = 0.50  # share of the move when the placed piece starts showing
 
 FILL = "fill"  # panel row width meaning "use the whole panel width"
@@ -76,7 +76,7 @@ ENGINE_OPTIONS = {
 
 EDITOR_HELP = (
     "Left click places the piece, right click erases it, "
-    "middle click places the other player."
+    "middle click places the other player (nothing when the piece is Empty)."
 )
 
 
@@ -944,7 +944,6 @@ def main():
 
     editor = {
         "board": np.zeros((3, 3), dtype=int),
-        "player": 1,        # player to move in the drawn position
         "suggestion": None, # move suggested by the engine
         "busy": False,
         "busy_since": 0.0,
@@ -1074,7 +1073,7 @@ def main():
     menu_panel.add_row(INPUT_HEIGHT, [
         (Label("Grid Size:", body_font), 0, None, None),
         (grid_size_box, None, 66, INPUT_HEIGHT),
-        (Label("(1-8)", small_font), None, None, None),
+        (Label(f"({MIN_GRID_SIZE}-{MAX_GRID_SIZE})", small_font), None, None, None),
     ])
     menu_panel.add_row(RADIO_ROW_HEIGHT, [(animation_checkbox, 0, None, None)])
     menu_panel.add_row(RADIO_ROW_HEIGHT, [(transfer_checkbox, 0, None, None)])
@@ -1392,6 +1391,10 @@ def main():
     def selected_piece():
         return PIECE_VALUES[next(radio.text for radio in editor_piece_group if radio.selected)]
 
+    def editor_player():
+        """Player the drawn position is set up for, from the "Player to move" row."""
+        return PIECE_VALUES[next(radio.text for radio in editor_turn_group if radio.selected)]
+
     def apply_editor_size():
         size = read_grid_size()
         editor_animator.clear()  # a new size cannot be animated from the old one
@@ -1411,7 +1414,7 @@ def main():
         previous = game["board"]
         game["board"] = editor["board"].copy()
         animate_board(game_animator, previous, game["board"])
-        game["player"] = editor["player"]
+        game["player"] = editor_player()
         game["message"] = ""
         game["log"] = []
         game["message_line"] = ""
@@ -1428,7 +1431,7 @@ def main():
         if editor["busy"]:
             return
         if not engine_process.submit(make_request(
-                editor["board"], editor["player"], engine_config())):
+                editor["board"], editor_player(), engine_config())):
             return
         editor["busy"] = True
         editor["busy_since"] = time.monotonic()
@@ -1451,12 +1454,15 @@ def main():
         if cell is None:
             return
         row, col = cell
+        piece = selected_piece()
         if button == 3:
             value = 0
         elif button == 2:
-            value = 3 - selected_piece()
+            if piece == 0:
+                return  # an empty selection has no other piece to place
+            value = 3 - piece
         else:
-            value = selected_piece()
+            value = piece
         if editor["board"][row, col] != value:
             previous = editor["board"].copy()
             editor["board"][row, col] = value
@@ -1590,7 +1596,7 @@ def main():
         if editor["busy"]:
             note = f"The computer is thinking... {time.monotonic() - editor['busy_since']:.1f}s"
         else:
-            note = f"{size}x{size} grid, {PLAYER_NAMES[editor['player']]} to move."
+            note = f"{size}x{size} grid, {PLAYER_NAMES[editor_player()]} to move."
         draw_status(
             f"Position editor  |  {rules_text()}\n"
             f"{note}\n"
