@@ -120,7 +120,7 @@ a query is a single array index. Two isomorphisms halve the data again: a colour
 player-2-to-move positions are answered from the swapped board, and a reflection maps the
 clockwise game onto the counterclockwise one, so only `still` and `clockwise` tables are built.
 
-This is 38 MB where the equivalent JSON records are ~4 GB, and it is what makes 4x4 playable.
+This is 38 MB where the equivalent JSON records could be tens of GB, and it is what makes 4x4 playable.
 
 Fallbacks, used automatically when a position is not in a table:
 
@@ -159,12 +159,9 @@ Four contexts per grid size (`still` and `clockwise` x transfer allowed / not al
 
 | Directory | Size | Contents |
 | --- | --- | --- |
-| `retrograde_game_tablebase/` | 38 MB | `retrograde.npz` value tables, 1x1 to 4x4 |
-| `compressed_game_tablebase/` | 3.9 GB | symmetry-reduced JSON, 1x1 to 3x3 |
-| `game_tablebase/` | 248 MB | full JSON, 1x1 to 3x3 |
-
-The JSON 4x4 directories are gitignored — they are multi-gigabyte and the generation was left
-incomplete, so the committed retrograde tables are the 4x4 source of truth.
+| `retrograde_game_tablebase/` | 38 MB | `retrograde.npz` value tables, **1x1 to 4x4** |
+| `compressed_game_tablebase/` | 17 MB | symmetry-reduced JSON, **1x1 to 3x3** |
+| `game_tablebase/` | 248 MB | full JSON, **1x1 to 3x3** |
 
 ## Credits
 
