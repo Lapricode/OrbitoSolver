@@ -1,4 +1,4 @@
-# Orbital Logic
+# ORBITO (Orbital Logic Game)
 
 A complete, exactly-solved two-player abstract strategy game for the `n x n` grid, with a
 Pygame front-end, a computer opponent, three independent solver back-ends and a
@@ -63,13 +63,6 @@ pieces wins. If both players hold a complete line simultaneously the position is
 The rotation is what gives the game its name and its character: the board you reason about is
 never quite the board you are looking at, so threats have to be tracked through a permutation
 that is applied after every single ply.
-
-```text
-        add: (0,2)          transfer (0,0) -> right
-   0  0  0             .  0  0        0  0  .
-   0  0  0     ==>      0  0  0  ==>   0  0  0     then rotate
-   0  0  0             0  0  0        0  0  0     (clockwise)
-```
 
 ---
 
@@ -589,9 +582,7 @@ Retrograde value tables, one file per `(grid size, rotation, transfer rule)`:
 | 3x3 | 19,683 | 6,034 | 5,478 | 7-8 kB |
 | 4x4 | 43,046,721 | 10,161,161 (`clockwise`/`counterclockwise`) | 9,721,176 | 5.6-12.8 MB |
 
-All six 4x4 rule contexts together come to roughly **62 MB**, against roughly **4 GB** for the
-equivalent JSON records. That 60x gap is the whole point of the retrograde format, and it is
-also why the 4x4 grid is playable at all in this repository.
+All six 4x4 rule contexts together come to roughly **62 MB**.
 
 For comparison, the JSON tablebases hold 236,196 records for 3x3 in full mode and 15,714 in
 compressed mode. `print_game_statistics(4)` reports 15,134,931 distinct 4x4 boards reducing to
