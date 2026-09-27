@@ -9,6 +9,7 @@ import numpy as np
 
 import create_game_tablebase as tablebase
 import orbital_logic_game_functions as olgf
+import retrograde_tablebase
 import solve_game
 
 
@@ -135,6 +136,12 @@ def _load_records(file_path):
 
 
 def _find_record(base_dir, state, rotate_direction, transfer_allowed, player_turn):
+    """Return the JSON tablebase record for a position, or None.
+
+    Only reached for positions the retrograde value tables do not cover, either
+    because no table is stored for the rule context or because the position is
+    not one a game played from the empty board can produce.
+    """
     file_path = _record_path(
         base_dir,
         state,
@@ -390,6 +397,19 @@ def lookup_solution(
     )
     tablebase_type = tablebase.normalise_tablebase_type(tablebase_type)
 
+    record = retrograde_tablebase.build_record(
+        base_dir,
+        state_array,
+        player,
+        rotation,
+        transfer,
+    )
+    if record is not None:
+        return _build_entry(
+            record, state_array, player, rotation, transfer,
+            base_dir, tablebase_type, symbols,
+        )
+
     if tablebase_type == "compressed":
         representation = tablebase.compressed_representation(
             state_array,
@@ -421,7 +441,23 @@ def lookup_solution(
             state_array,
             rotation,
         )
+    return _build_entry(
+        record, state_array, player, rotation, transfer,
+        base_dir, tablebase_type, symbols,
+    )
 
+
+def _build_entry(
+    record,
+    state_array,
+    player,
+    rotation,
+    transfer,
+    base_dir,
+    tablebase_type,
+    symbols,
+):
+    """Assemble the public lookup result from a tablebase record."""
     solution = record.get("solution", {})
     moves_sequence = solution.get("moves_sequence")
     if moves_sequence is None:

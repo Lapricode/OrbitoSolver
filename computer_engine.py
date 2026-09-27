@@ -1,8 +1,12 @@
 """Computer opponent logic shared by the graphical front-end.
 
-The engine always tries to answer from the compressed game tablebase, which
-stores the perfect score and the principal variation of every position it
-covers. When the position is missing, the caller decides what happens next:
+The engine answers from the retrograde value tables in
+:data:`RETROGRADE_TABLEBASE_DIR`: they hold the perfect score of every position a
+game can reach and are consulted as a single array index. Positions no stored
+table covers, for instance a rule context that has not been built yet, fall back
+to the compressed game tablebase, which stores the perfect score and the
+principal variation of every position it covers. When neither tablebase has the
+position, the caller decides what happens next:
 
 * :data:`FALLBACK_RANDOM` plays a uniformly random legal move,
 * :data:`FALLBACK_SEARCH` runs the iterative deepening minimax search from
@@ -28,8 +32,13 @@ import solve_game
 
 
 MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
+RETROGRADE_TABLEBASE_DIR = os.path.join(MODULE_DIR, "retrograde_game_tablebase")
 COMPRESSED_TABLEBASE_DIR = os.path.join(MODULE_DIR, "compressed_game_tablebase")
 FULL_TABLEBASE_DIR = os.path.join(MODULE_DIR, "game_tablebase")
+
+# Most preferred first: the retrograde tables are exact for every reachable
+# position and answer with one array index, the JSON tablebase is the fallback.
+TABLEBASE_DIRS = (RETROGRADE_TABLEBASE_DIR, COMPRESSED_TABLEBASE_DIR)
 
 TABLEBASE_TYPE = "compressed"
 USE_TABLEBASE = True
@@ -50,16 +59,30 @@ MAX_SEARCH_DEPTH = 100
 
 
 def default_tablebase_dir(tablebase_type=TABLEBASE_TYPE):
-    """Absolute path of a tablebase shipped next to this module."""
+    """Absolute path of a JSON tablebase shipped next to this module."""
     return (COMPRESSED_TABLEBASE_DIR if tablebase_type == TABLEBASE_TYPE
             else FULL_TABLEBASE_DIR)
 
 
+def tablebase_dirs(base_dir=None):
+    """Directories to consult, most preferred first.
+
+    An explicit ``base_dir`` replaces the whole order, which keeps a caller that
+    points the engine at one directory in full control of what it reads.
+    """
+    if base_dir is not None:
+        return (base_dir,)
+    return TABLEBASE_DIRS
+
+
 def available_grid_sizes(tablebase_type=TABLEBASE_TYPE, base_dir=None):
-    """Grid sizes covered by the tablebase, as sorted integers."""
-    if base_dir is None:
-        base_dir = default_tablebase_dir(tablebase_type)
-    return get_solution.available_grid_sizes(base_dir, tablebase_type)
+    """Grid sizes covered by any tablebase, as sorted integers."""
+    if base_dir is not None:
+        return get_solution.available_grid_sizes(base_dir, tablebase_type)
+    sizes = set()
+    for directory in tablebase_dirs():
+        sizes.update(get_solution.available_grid_sizes(directory, tablebase_type))
+    return sorted(sizes)
 
 
 def clamp_time_limit(time_limit):
@@ -102,22 +125,28 @@ def move_to_text(move):
 def tablebase_entry(state, player_turn, rotation, transfer_allowed, base_dir=None):
     """Return the tablebase entry of a position, or None when absent.
 
-    Positions whose game already ended have no legal move to suggest, so they
-    report None as well.
+    The retrograde value tables are consulted first and the compressed JSON
+    tablebase afterwards, so the computer follows the stored perfect play of the
+    value table whenever one exists for the rule context. Positions whose game
+    already ended have no legal move to suggest, so they report None as well.
     """
     if olgf.evaluate_game_state(state) is not None:
         return None
-    try:
-        return get_solution.lookup_solution(
-            state=state,
-            player_turn=player_turn,
-            rotate_direction=rotation,
-            transfer_allowed=bool(transfer_allowed),
-            base_dir=default_tablebase_dir() if base_dir is None else base_dir,
-            tablebase_type=TABLEBASE_TYPE,
-        )
-    except ValueError:
-        return None
+    for directory in tablebase_dirs(base_dir):
+        try:
+            entry = get_solution.lookup_solution(
+                state=state,
+                player_turn=player_turn,
+                rotate_direction=rotation,
+                transfer_allowed=bool(transfer_allowed),
+                base_dir=directory,
+                tablebase_type=TABLEBASE_TYPE,
+            )
+        except ValueError:
+            return None
+        if entry is not None:
+            return entry
+    return None
 
 
 def _result(source, move=None, score=None, message="", **extra):
