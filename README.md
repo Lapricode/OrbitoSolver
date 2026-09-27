@@ -28,6 +28,7 @@ this repository is *how* that is achieved, which is described at length in
   - [Board coding: base-3 dense tables](#board-coding-base-3-dense-tables)
   - [The sweep: values and distances in one pass](#the-sweep-values-and-distances-in-one-pass)
   - [Storing only half the table: the colour-swap isomorphism](#storing-only-half-the-table-the-colour-swap-isomorphism)
+  - [Storing one rotating context: the reflection isomorphism](#storing-one-rotating-context-the-reflection-isomorphism)
   - [Reconstructing the principal variation](#reconstructing-the-principal-variation)
   - [Verification against an independent solver](#verification-against-an-independent-solver)
   - [Tier 2 — Symmetry-reduced JSON tablebase](#tier-2--symmetry-reduced-json-tablebase)
@@ -99,7 +100,9 @@ that is applied after every single ply.
 
 - **Retrograde tablebase** (`retrograde_tablebase.py`) — one bottom-up sweep per rule context;
   every position in the context is evaluated exactly once for the entire context. Complete for
-  1x1, 2x2, 3x3 and 4x4 across all six rule contexts in ~62 MB total.
+  1x1, 2x2, 3x3 and 4x4. Only the `still` and `clockwise` contexts are built, because a
+  reflection of the board answers the counterclockwise game; 4x4 costs **37.5 MB** and the three
+  smaller grids together **50 kB**.
 - **Symmetry-reduced JSON tablebase** (`create_game_tablebase.py`) — canonical
   representative per symmetry orbit, 4x smaller than the naive table, complete for 1x1 to 3x3
   (4x4 generation exists but is gitignored and was left incomplete).
@@ -110,8 +113,8 @@ that is applied after every single ply.
   parallel root and a wall-clock-limited iterative-deepening wrapper.
 - **Cross-verification** (`retrograde_tablebase.py --verify`) — samples stored positions per
   layer, re-solves them with the independent search engine, replays the reconstructed line
-  through the rules module and asserts the stored distance matches. Exits non-zero on any
-  mismatch.
+  through the rules module, asserts the stored distance matches, and cross-checks the other
+  rotating context against the mirror. Exits non-zero on any mismatch.
 - **Monte-Carlo statistics** (`test_game.py`) — vectorised batched random play producing
   per-start-player win/draw probabilities, plus a slow scalar reference loop for comparison.
 - **Board statistics** (`print_game_statistics`) — Burnside-style counts of how many distinct
@@ -125,7 +128,8 @@ that is applied after every single ply.
 - Multiprocessing everywhere it matters (tablebase generation, retrograde layers, parallel
   search root) with sensible chunking and an automatic serial fallback.
 - Small on-disk table cache keyed by `(path, mtime, size)` with FIFO eviction, so repeated
-  queries do not re-read the `.npz` files.
+  queries do not re-read the `.npz` files. The four most recently used tables are kept, which
+  covers a game at a fixed rule context.
 
 ---
 
@@ -174,6 +178,13 @@ side to move and the rules, then press *Ask Computer* to get the full text repor
 "Game rules / Initial game state / Start player" block followed by the perfect game evolution,
 board by board.
 
+The engine is a policy layer over the back-ends rather than a solver of its own. On every move
+it asks `retrograde_game_tablebase/` first — the value tables are exact for every reachable
+position and answer with a single array index — and falls back to `compressed_game_tablebase/`
+for any position a value table does not cover, and only then to the configured fallback. The
+`--rotations` reduction is invisible from the GUI: selecting *Counterclockwise* is answered from
+the clockwise table by reflecting the board and reflecting the line back.
+
 ### Command line
 
 ```bash
@@ -184,9 +195,14 @@ python solve_game.py
 python create_game_tablebase.py -n 3 --tablebase compressed --workers 8
 python create_game_tablebase.py -n 3 --tablebase full
 
-# Build the retrograde value tables, then verify them
-python retrograde_tablebase.py -n 4 --rotations all --transfers all --workers 8
-python retrograde_tablebase.py -n 4 --verify 4
+# Build the retrograde value tables, then verify them.
+# --base-dir matters: with no argument the tables land in compressed_game_tablebase/,
+# the JSON fallback directory, not in the retrograde_game_tablebase/ the engine reads first.
+# The default --rotations is "still,clockwise": a reflection answers the counterclockwise
+# game, so only two rotation contexts have to be stored.
+python retrograde_tablebase.py -n 4 --base-dir retrograde_game_tablebase --workers 8
+python retrograde_tablebase.py -n 4 --base-dir retrograde_game_tablebase --verify 4
+python retrograde_tablebase.py -n 4 --base-dir retrograde_game_tablebase --rotations all  # redundant full set
 
 # Look up a position ("0012" is a 2x2 board)
 python get_solution.py 0012 -p 1 -r clockwise --transfer-allowed
@@ -282,14 +298,18 @@ the opponent has already won — boards the rules score as a draw, but which no 
 reach. The result is that the table contains only boards that can genuinely occur in a game
 played from the empty board.
 
-For the 4x4 context the layers are:
+For the 4x4 `still` + transfer context the layers are:
 
 | ply | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| positions | 1 | 16 | 240 | 1680 | 10920 | 43680 | 160160 | 400400 | 900900 | 1441440 | 2018016 | 2018016 | 1681632 | 960640 | 409920 | 101620 | 11880 |
+| positions | 1 | 16 | 240 | 1680 | 10920 | 43680 | 160160 | 400400 | 900900 | 1441440 | 2018016 | 2018016 | 1681632 | 960640 | 409920 | 101624 | 11888 |
 
-Note that the middle layers sit at the binomial maximum while the deepest layers are truncated:
-that is exactly the terminal-position pruning at work.
+That is 10,161,173 of the 43,046,721 boards a 4x4 grid admits. The count is not a filter applied
+afterwards — at ply *p* a game can only hold `ceil(p/2)` player-1 pieces, which already rules
+out 76% of the boards, and terminal pruning removes a further 4,606 that could only be reached by
+playing on after somebody had already won. Note that the middle layers sit at the binomial
+maximum while the deepest layers are truncated: that is exactly the terminal-position pruning at
+work.
 
 **Phase 2 — sweep bottom-up.**
 
@@ -321,6 +341,20 @@ The `score` array is `int16` with `UNSOLVED = 32767` marking slots that are not 
 also makes "unreachable" and "not computed" impossible to confuse), and `dtx` is `uint8`
 holding the distance to the terminal node. The cell count is capped at 255 for exactly that
 reason — the distance has to fit in a single byte.
+
+The array is dense over **all** `3^(n^2)` boards, not just the reachable ones, so a lookup never
+has to search for the right slot. That looks wasteful and is not: at 3 bytes per slot the 4x4
+array is 123.2 MB of raw data, and 76.4% of those slots hold nothing but the `UNSOLVED` sentinel
+— identical bytes, which `np.savez_compressed` deflates to 123 kB. Add the fact that the values
+themselves are barely information (the whole 4x4 table contains 12 distinct score values: `0` for
+the 4,607,791 draws, and `±(1000 - d)` with `d <= 9`) and the 123 MB lands as an 8.78 MB file.
+That is 7.1% of raw, and **0.91 bytes per stored position**.
+
+The JSON records work out to about 1.1 kB apiece (247 MB for the 236,196 records of 3x3 in full
+mode), so per position the value tables are roughly **1,200x smaller** while answering the same
+question. That ratio is why a 4x4 JSON tablebase was never finished — extrapolating the same
+1.1 kB over the 39.8M positions of the full six-context set gives tens of gigabytes, against
+37.5 MB for the four stored contexts.
 
 The non-obvious part is that computing a child code is not a re-encode. The codec precomputes
 a per-cell weight table, and then also the weight each cell takes *after* the rotation:
@@ -394,7 +428,7 @@ the side to move** rather than on the player alone:
 ```python
 occupied = number of pieces on the board
 ones     = number of player-1 pieces
-natural  = 1 if occupied % 2 == 0 else 2          # who moved on the previous ply
+natural  = 1 if occupied % 2 == 0 else 2          # the side to move at that ply
 
 if   ones == (occupied + 1) // 2 and player_turn == natural:   return encode(board)
 elif ones == occupied // 2       and player_turn == 3 - natural: return encode(swap(board))
@@ -409,6 +443,98 @@ identity along with the colours.
 The same idea appears a third time in the JSON tablebase, where it is called `swapped` in the
 `compressed_representation` dict, and in `get_solution._swap_game_result`, which has to flip
 the stored `game_result` string back.
+
+### Storing one rotating context: the reflection isomorphism
+
+The colour swap above is not the only reduction available. Reflecting the board also maps the
+`clockwise` game onto the `counterclockwise` game:
+
+- a reflection conjugates a clockwise quarter turn into a counterclockwise one, so the
+  mandatory rotation phase of one game becomes the rotation phase of the other;
+- the orthogonal adjacency that a **transfer** uses is preserved, so the move set is preserved —
+  a transfer that was legal before the mirror is legal after it, with the direction relabelled;
+- a **completed line** is mapped onto a completed line, so the win condition and the both-lines
+  draw are preserved.
+
+The three phases of a turn are therefore all carried over, and the two games are isomorphic. A
+`counterclockwise` position can be answered from the `clockwise` table after reflecting the
+board, and the line has to be reflected back on the way out:
+
+```python
+_COUNTERPART_ROTATION = {"clockwise": "counterclockwise",
+                         "counterclockwise": "clockwise"}
+_REFLECTION = (True, 0)          # vertical mirror; any reflection of the square does,
+                                  # and this one is its own inverse, which is what lets
+                                  # the same mapping send the answer back
+```
+
+`build_record` therefore tries the context that was asked for first and only reflects when that
+context has no table:
+
+```python
+table  = load_table(base_dir, grid_size, rotation, transfer_allowed)
+if table is None or table.entry(state, player) is None:
+    counterpart = _COUNTERPART_ROTATION.get(rotation)
+    reflected   = tablebase._apply_symmetry(state, _REFLECTION)
+    entry       = load_table(base_dir, grid_size, counterpart, ...).entry(reflected, player)
+    moves       = [tablebase.map_compressed_move(m, _REFLECTION, grid_size, rotation) for m in ...]
+```
+
+The mapping is not new code: it is the `create_game_tablebase.map_compressed_move` /
+`map_compressed_state` pair that the JSON tablebase already used for exactly this reduction, so
+both tablebases spell a reflection the same way — the cell is remapped and the transfer
+direction is *recomputed* from the mapped source-to-target delta, which is what keeps
+`transfer (0,2) left` from silently becoming an illegal move.
+
+**The reflection has to be applied to the board, not just to the rule name.** This is the one
+easy mistake here, and the tables make it visible: for a 4x4 position the clockwise and the
+counterclockwise games genuinely have *different* values, and both are player-1 wins of a
+different length. This position, player 1 to move, transfer allowed:
+
+```text
+. . . .        . . . .        clockwise table, asked for the position on the left
+. . . .        . . . .        clockwise          score 989, line 11 plies
+. 2 . 2   <->  0 2 0 2        counterclockwise   score 991, line  9 plies
+. 1 . 1        0 1 0 1
+```
+
+The value on the right is the clockwise table read at `mirror(position)` — which is exactly what
+a counterclockwise query needs, and the record comes back tagged `reflected_from: 'clockwise'`.
+Answering the *same* board by simply swapping the rule name would have returned 989, which is the
+answer to a different question. The identity that actually holds is
+
+```text
+value_counterclockwise(board) == value_clockwise(mirror(board))
+```
+
+and that is the line `--verify` checks.
+
+`STORED_ROTATIONS = ("still", "clockwise")` is therefore the default for `build_tablebase`, for
+`verify_tablebase` and for the command line, and `--rotations all` still produces the redundant
+set. `still` is *not* covered by the reflection — a game with no rotation phase is not the same
+game as one with a quarter turn after every ply — and the transfer rule is a different rule set
+rather than a different orientation, so four of the six original contexts survive: two rotations
+times two transfer rules. For 4x4 that is a halving of both the build time and the tables, from
+62 MB down to 37.5 MB.
+
+The reduction was checked rather than assumed, and it holds *exactly* rather than approximately:
+
+| check | result |
+| --- | --- |
+| `cw(b) == ccw(mirror(b))` for stored positions, 1x1–3x3, both transfer rules, all three reflections of the square | 31,629 comparisons, 0 mismatches |
+| reflected line replayed with `play_turn`: legality, states, terminal outcome, length | 114 positions, 0 problems |
+| 855 lookups against a `still`+`clockwise`-only build vs a full six-context build | 0 unanswered, 0 score differences, 0 illegal lines |
+| 4x4 example above, served from the clockwise table | cw 989 (11 plies) direct, ccw 991 (9 plies) via `reflected_from` |
+
+The 4x4 row is deliberately *not* cross-checked against `solve_game`: proving a 4x4 result by
+search is the very thing the tablebase exists to avoid. What makes the 4x4 tables trustworthy
+instead is that the identical code path is verified exhaustively on 1x1 to 3x3, where an
+independent search can confirm every sample, plus the line replay and the terminal evaluation,
+which do run at 4x4.
+
+The one visible consequence is benign: where a position has **two equally good moves**, the
+reflected path may report the other one, because the mirrored position enumerates its children in
+a different order. Scores and line lengths always agree.
 
 ### Reconstructing the principal variation
 
@@ -435,7 +561,9 @@ generator, they are a genuine cross-check of each other. `retrograde_tablebase.p
 runs, for every context:
 
 1. **Sample from the stored table**, not from random boards — up to `512 * N` random codes per
-   layer filtered by occupancy, so every sample is a position the context really covers.
+   layer filtered by occupancy, so every sample is a position the context really covers. This
+   matters: a board with a legal piece split can still be *unreachable* under a rule context, and
+   such a board is correctly absent, so generating boards at random would produce false alarms.
 2. **Re-solve each sample with `solve_game.solve_game`**, an independent negamax + alpha/beta
    + transposition table implementation, and compare scores.
 3. **Rebuild the PV and assert `len(moves) == dtx`** — this checks the distance field, which a
@@ -444,9 +572,18 @@ runs, for every context:
    board shape and that the terminal evaluation matches the stored score.
 5. **Generate boards with a deliberately wrong piece split** and assert they are *absent* from
    the table — verifying the reachability pruning and the colour-swap routing.
+6. **Cross-check the other rotating context** — assert that it reports the same reachability
+   decision, that it carries exactly the value this context stores for the mirrored board, and
+   replay the line it returns from the position the caller asked about. When the counterpart
+   table is absent this exercises the reflection path, so `--verify` covers the reduction that
+   makes the `counterclockwise` folder unnecessary.
 
 Any mismatch prints `MISMATCH: ...` to stderr and the process exits with code 1. This is what
 makes the tablebases trustworthy rather than merely fast.
+
+One caveat on 4x4: `solve_game` on a *shallow* 4x4 position can run for hours, so
+`--verify 4` on 4x4 is not a practical command — use a small sample count, or verify a specific
+context. Every layer is sampled, so a run that does finish covers the full board.
 
 ### Tier 2 — Symmetry-reduced JSON tablebase
 
@@ -535,6 +672,23 @@ pickling back through the parent.
 Every multiprocessing path in the repository degrades gracefully to a serial one — `_pool_context`
 falls back when `fork` is unavailable, and `tqdm` is genuinely optional.
 
+What the tiers actually cost per query, measured on this machine:
+
+| Query | 3x3 | 4x4 |
+| --- | --- | --- |
+| `retrograde_tablebase` — first load of a table (decompress) | 11 ms | 426 ms |
+| `retrograde_tablebase` — value lookup alone, warm | **4.9 us** | **6.8 us** |
+| `retrograde_tablebase` — full `lookup_solution`, line rebuilt and report formatted | 0.26 ms | 3.2 ms |
+| `retrograde_tablebase` — the same counterclockwise query, answered by reflection | 0.27 ms | 3.2 ms |
+| `compressed_game_tablebase` — warm `lookup_solution`, whole formatted report | 0.38 ms | not built |
+
+The value lookup is the part that has to be O(1) and it is: encoding the board and reading two
+array slots. The dominant per-move cost on a large board is therefore not the table at all but
+re-enumerating the legal moves at every ply of the reconstructed line — 2.8 ms of the 3.2 ms
+above. The 426 ms first load is a one-off per table per process, paid once at game start, and is
+why the loader keeps the four most recently used tables around. The reflection costs nothing
+measurable, which is the point of reducing six contexts to four.
+
 ---
 
 ## Repository layout
@@ -561,28 +715,38 @@ Generated data directories:
 
 | Directory | Size | Contents |
 | --- | --- | --- |
-| `retrograde_game_tablebase/` | 62 MB | `retrograde.npz` value tables, 1x1 to 4x4, all 6 contexts |
+| `retrograde_game_tablebase/` | 38 MB | `retrograde.npz` value tables, 1x1 to 4x4, 4 rule contexts per grid |
 | `compressed_game_tablebase/` | 3.9 GB | symmetry-reduced JSON, 1x1 to 3x3 complete, 4x4 partial |
 | `game_tablebase/` | 248 MB | full JSON, 1x1 to 3x3 |
 
 The two JSON 4x4 directories are gitignored (`game_tablebase/4x4/`,
 `compressed_game_tablebase/4x4/`) — they are multi-gigabyte and the generation was left
-incomplete, so the committed retrograde tables are the 4x4 source of truth.
+incomplete, so the committed retrograde tables are the 4x4 source of truth. The retrograde 4x4
+tables (37.5 MB) *are* committed, because they are small enough to be worth having in the tree;
+the redundant `counterclockwise` pair is not needed and can be dropped.
+
+The `1x1`, `2x2` and `3x3` grids still have all six contexts on disk — 50 kB in total, versus
+40 kB for the four that are actually needed. Those extra folders are harmless leftovers of an
+earlier build; a counterclockwise query is answered by reflection whether or not the folder
+exists, so they can be deleted whenever convenient.
 
 ---
 
 ## Precomputed tablebases
 
-Retrograde value tables, one file per `(grid size, rotation, transfer rule)`:
+Retrograde value tables, one file per `(grid size, rotation, transfer rule)`. Only the `still`
+and `clockwise` rotations are stored; `counterclockwise` is served by reflection:
 
-| Grid | Table entries | Positions (`transfer_allowed`) | Positions (`transfer_not_allowed`) | Per file |
-| --- | --- | --- | --- | --- |
-| 1x1 | 3 | 2 | 2 | ~0.8 kB |
-| 2x2 | 81 | 29 | 29 | ~0.9 kB |
-| 3x3 | 19,683 | 6,034 | 5,478 | 7-8 kB |
-| 4x4 | 43,046,721 | 10,161,161 (`clockwise`/`counterclockwise`) | 9,721,176 | 5.6-12.8 MB |
+| Grid | Table entries | `still` + transfer | `clockwise` + transfer | `still` no transfer | `clockwise` no transfer | Per file |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1x1 | 3 | 2 | 2 | 2 | 2 | ~0.8 kB |
+| 2x2 | 81 | 29 | 29 | 29 | 29 | ~0.9 kB |
+| 3x3 | 19,683 | 6,034 | 6,034 | 5,478 | 5,478 | 7.3-8.0 kB |
+| 4x4 | 43,046,721 | 10,161,173 | 10,161,161 | 9,722,011 | 9,721,176 | 5.3-12.0 MB |
 
-All six 4x4 rule contexts together come to roughly **62 MB**.
+The four 4x4 contexts come to **37.5 MB** and 39,765,521 positions; the redundant
+`counterclockwise` pair would have added another 24.5 MB and 19.9M positions. For 1x1 to 3x3 the
+tables are negligible either way — 40 kB for the four that are needed, 50 kB with the leftovers.
 
 For comparison, the JSON tablebases hold 236,196 records for 3x3 in full mode and 15,714 in
 compressed mode. `print_game_statistics(4)` reports 15,134,931 distinct 4x4 boards reducing to
@@ -610,6 +774,11 @@ the empty board. With the retrograde table the same query is a single array inde
   the search enumerates.
 - Rotation permutations are built from concentric rings (`_build_rings`), which is why the
   centre cell of an odd-sized board maps to itself and needs no special case.
+- `_apply_symmetry` / `map_compressed_move` in `create_game_tablebase.py` are the single
+  definition of "reflect this board" in the repository. The retrograde module reaches for them
+  rather than writing its own, so the two tablebases cannot drift apart on what a reflection
+  does to a transfer direction — the bug that this reduction would silently introduce is a
+  reflection that maps a legal transfer onto an illegal one.
 - There is no GPU code, no Zobrist hashing and no bitboard representation in the current tree.
   Position identity is either the base-3 integer code (retrograde) or the
   `<grid>_<digits>_<context>` string ID (JSON), and the search transposition table is keyed by

@@ -376,7 +376,10 @@ def lookup_solution(
     ``score`` is always expressed from the point of view of ``player_turn``
     (the player to move), and ``best_move`` is a move dictionary ready to be
     passed to ``orbital_logic_game_functions.play_turn``. ``None`` is returned
-    when the position is not part of the selected tablebase.
+    when the position is not part of the selected tablebase. A rotating position
+    is answered from the other rotation as well, because the two are the same
+    game seen in a mirror, so a base directory that stored only the clockwise
+    tables still answers counterclockwise queries.
     """
     (
         state_array,

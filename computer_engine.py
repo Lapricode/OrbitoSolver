@@ -127,8 +127,11 @@ def tablebase_entry(state, player_turn, rotation, transfer_allowed, base_dir=Non
 
     The retrograde value tables are consulted first and the compressed JSON
     tablebase afterwards, so the computer follows the stored perfect play of the
-    value table whenever one exists for the rule context. Positions whose game
-    already ended have no legal move to suggest, so they report None as well.
+    value table whenever one exists for the rule context. A counterclockwise
+    position is answered from the clockwise table by a reflection of the board,
+    which is why a build only needs the ``still`` and ``clockwise`` contexts.
+    Positions whose game already ended have no legal move to suggest, so they
+    report None as well.
     """
     if olgf.evaluate_game_state(state) is not None:
         return None

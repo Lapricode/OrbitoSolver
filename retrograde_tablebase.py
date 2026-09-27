@@ -51,6 +51,19 @@ table only contains boards that can really occur in a game played from the
 empty board. Without that pruning the enumeration also produces boards where a
 player keeps placing pieces after the opponent has already completed a line,
 which the rules score as a draw and which no real game can reach.
+
+One rotation directory is enough
+--------------------------------
+A reflection of the board maps the clockwise game onto the counterclockwise one:
+it turns a clockwise quarter turn into a counterclockwise one, it maps the
+orthogonal adjacency a transfer uses onto itself, and it maps a completed line
+onto a completed line. So the two games are isomorphic, and a counterclockwise
+position is answered from the clockwise table after reflecting the board, with
+the moves reflected back on the way out. Only the ``still`` and ``clockwise``
+tables are therefore worth storing, which is what
+:data:`tablebase.COMPRESSED_ROTATION_DIRECTIONS` lists and what this module
+builds by default. The mapping is the one ``create_game_tablebase`` already uses
+for the JSON records, so both tablebases agree on how a reflection is spelled.
 """
 
 import argparse
@@ -75,6 +88,17 @@ WIN_SCORE = int(solve_game.WIN_SCORE)
 _NO_DISTANCE = 256
 _SWAPPED_CELL = (0, 2, 1)
 _ALL_ROTATIONS = tablebase.ROTATION_DIRECTIONS
+# A reflection maps the clockwise game onto the counterclockwise one, so only
+# these two contexts have to be stored and built.
+STORED_ROTATIONS = tablebase.COMPRESSED_ROTATION_DIRECTIONS
+# A vertical mirror turns a clockwise quarter turn into a counterclockwise one.
+# Any reflection of the square does; this one is its own inverse, which is what
+# lets the same mapping send the answer back.
+_REFLECTION = (True, 0)
+_COUNTERPART_ROTATION = {
+    "clockwise": "counterclockwise",
+    "counterclockwise": "clockwise",
+}
 _TABLE_CACHE_LIMIT = 4
 _table_cache = {}
 
@@ -566,7 +590,7 @@ def build_context_tablebase(
 def build_tablebase(
     base_dir,
     grid_size,
-    rotations=_ALL_ROTATIONS,
+    rotations=STORED_ROTATIONS,
     transfers=tablebase.TRANSFER_RULES,
     workers=None,
     show_progress=True,
@@ -780,44 +804,98 @@ def principal_variation(table, state, player_turn, rotation):
     return moves_sequence, states_sequence
 
 
-def build_record(base_dir, state, player_turn, rotate_direction, transfer_allowed):
-    """Return a tablebase record shaped like the JSON ones, or None.
-
-    ``get_solution`` consumes records with a fixed layout, so the value tables
-    are exposed through the same structure. That keeps the JSON files as a
-    fallback rather than turning them into a second, divergent format.
-    """
-    state = tablebase._as_state(state)
-    grid_size = state.shape[0]
-    rotation = tablebase._canonical_rotation(rotate_direction)
-    table = load_table(base_dir, grid_size, rotation, transfer_allowed)
-    if table is None:
-        return None
-    entry = table.entry(state, player_turn)
-    if entry is None:
-        return None
-    score = entry[0]
+def _record_for_entry(
+    base_dir,
+    state,
+    player_turn,
+    rotation,
+    transfer_allowed,
+    score,
+    moves_sequence,
+    states_sequence,
+    extra=None,
+):
+    """Assemble a tablebase record from an already known value and line."""
     if score > 0:
         game_result = f"player{int(player_turn)}_wins"
     elif score < 0:
         game_result = f"player{3 - int(player_turn)}_wins"
     else:
         game_result = "draw"
-    moves_sequence, states_sequence = principal_variation(
-        table, state, player_turn, rotation,
-    )
-    return {
+    record = {
         "id": tablebase.get_position_id(state, rotation, transfer_allowed, player_turn),
-        "position": state.tolist(),
+        "position": np.asarray(state, dtype=int).tolist(),
         "solution": {
             "score": score,
             "game_result": game_result,
             "best_move": moves_sequence[0] if moves_sequence else None,
             "moves_sequence": moves_sequence,
-            "states_sequence": [item.tolist() for item in states_sequence],
+            "states_sequence": [np.asarray(item, dtype=int).tolist() for item in states_sequence],
         },
         "source": RETROGRADE_FILENAME,
     }
+    if extra:
+        record.update(extra)
+    return record
+
+
+def build_record(base_dir, state, player_turn, rotate_direction, transfer_allowed):
+    """Return a tablebase record shaped like the JSON ones, or None.
+
+    ``get_solution`` consumes records with a fixed layout, so the value tables
+    are exposed through the same structure. That keeps the JSON files as a
+    fallback rather than turning them into a second, divergent format.
+
+    The context of the position is tried first. When it has no table, the
+    position is reflected onto the counterpart rotating context, which is what
+    lets a build that stored only one of the two answer both, and the line is
+    reflected back into the orientation of the caller. ``None`` is returned when
+    neither context stores the position.
+    """
+    state = tablebase._as_state(state)
+    grid_size = state.shape[0]
+    rotation = tablebase._canonical_rotation(rotate_direction)
+    transfer_allowed = bool(transfer_allowed)
+    player = int(player_turn)
+
+    table = load_table(base_dir, grid_size, rotation, transfer_allowed)
+    if table is not None:
+        entry = table.entry(state, player)
+        if entry is not None:
+            moves, states = principal_variation(table, state, player, rotation)
+            return _record_for_entry(
+                base_dir, state, player, rotation, transfer_allowed,
+                entry[0], moves, states,
+            )
+
+    counterpart = _COUNTERPART_ROTATION.get(rotation)
+    if counterpart is None:
+        return None
+    table = load_table(base_dir, grid_size, counterpart, transfer_allowed)
+    if table is None:
+        return None
+    reflected = tablebase._apply_symmetry(state, _REFLECTION)
+    entry = table.entry(reflected, player)
+    if entry is None:
+        return None
+    stored_moves, stored_states = principal_variation(
+        table, reflected, player, counterpart,
+    )
+    moves = [
+        tablebase.map_compressed_move(move, _REFLECTION, grid_size, rotation)
+        for move in stored_moves
+    ]
+    states = [
+        tablebase.map_compressed_state(item, _REFLECTION) for item in stored_states
+    ]
+    return _record_for_entry(
+        base_dir, state, player, rotation, transfer_allowed,
+        entry[0], moves, states,
+        extra={
+            "reflected_from": counterpart,
+            "symmetry": list(_REFLECTION),
+        },
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -855,6 +933,55 @@ def _sample_stored_positions(codec, score, ply, rng, wanted):
             np.asarray(cells, dtype=int).reshape((codec.grid_size, codec.grid_size))
         )
     return found
+
+
+def _check_counterpart(
+    base_dir,
+    grid_size,
+    rotation,
+    transfer_allowed,
+    table,
+    board,
+    player_turn,
+    ply,
+):
+    """Check the other rotating context, directly or through a reflection.
+
+    The two rotating games are the same game seen in a mirror, so the counterpart
+    of a position has to carry the value that this context stores for the
+    reflected board, and the line it returns has to stay legal when replayed from
+    the position the caller asked about. This is the check that justifies
+    storing only one of the two: when the counterpart table is absent the answer
+    has to come from the reflection, so this exercises that path as well.
+    """
+    counterpart = _COUNTERPART_ROTATION.get(rotation)
+    if counterpart is None:
+        return []
+    record = build_record(
+        base_dir, board, player_turn, counterpart, transfer_allowed,
+    )
+    solution = record["solution"] if record is not None else None
+    own = table.entry(
+        tablebase._apply_symmetry(board, _REFLECTION), player_turn,
+    )
+    if (own is None) != (solution is None):
+        return [
+            f"ply {ply}: the {counterpart} context and the {rotation} context do "
+            f"not agree on whether {board.tolist()} is stored"
+        ]
+    if own is None:
+        return []
+    if solution["score"] != own[0]:
+        return [
+            f"ply {ply}: the {counterpart} context says {solution['score']} for "
+            f"{board.tolist()}, the {rotation} table says {own[0]} for its mirror"
+        ]
+    problem = _replay(
+        board, solution["moves_sequence"], solution["score"], player_turn, ply,
+    )
+    if problem is not None:
+        return [f"{counterpart} context: {problem}"]
+    return []
 
 
 def verify_context(
@@ -926,6 +1053,14 @@ def verify_context(
                     if problem is not None:
                         problems.append(problem)
                     checked += 1
+                    reflected = _check_counterpart(
+                        base_dir, grid_size, rotation, transfer_allowed,
+                        table, board, player, ply,
+                    )
+                    if reflected:
+                        problems.extend(reflected)
+                    else:
+                        checked += 1
             for _ in range(samples_per_layer):
                 board = _random_position(codec, ply, rng)
                 cells = tuple(int(cell) for cell in board.ravel())
@@ -976,7 +1111,7 @@ def _replay(board, moves, score, player_turn, ply):
 def verify_tablebase(
     base_dir,
     grid_size,
-    rotations=_ALL_ROTATIONS,
+    rotations=STORED_ROTATIONS,
     transfers=tablebase.TRANSFER_RULES,
     samples_per_layer=4,
     seed=0,
@@ -1020,8 +1155,11 @@ def main(argv=None):
         help="size of the square grid (default: 2)",
     )
     parser.add_argument(
-        "--rotations", default="all",
-        help="comma separated rotation directions, or 'all' (default: all)",
+        "--rotations", default=",".join(STORED_ROTATIONS),
+        help="comma separated rotation directions, or 'all'; a reflection maps "
+             "the clockwise game onto the counterclockwise one, so the default "
+             f"is only {', '.join(STORED_ROTATIONS)} and 'counterclockwise' is "
+             "answered from the clockwise table",
     )
     parser.add_argument(
         "--transfers", default="all",
