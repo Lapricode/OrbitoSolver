@@ -924,7 +924,7 @@ def main():
     menu_rect = pygame.Rect(board_width, 0, menu_width, WINDOW_HEIGHT)
 
     game = {
-        "board": np.zeros((3, 3), dtype=int),
+        "board": np.zeros((4, 4), dtype=int),
         "player": 1,        # player to move (1 = Black, 2 = White)
         "over": False,
         "message": "",
@@ -943,7 +943,7 @@ def main():
     }
 
     editor = {
-        "board": np.zeros((3, 3), dtype=int),
+        "board": np.zeros((4, 4), dtype=int),
         "suggestion": None, # move suggested by the engine
         "busy": False,
         "busy_since": 0.0,
@@ -958,7 +958,7 @@ def main():
     huge_font = pygame.font.Font(None, HUGE_SIZE)
 
     # ---------------- Shared setting widgets ----------------
-    grid_size_box = InputBox(66, INPUT_HEIGHT, BODY_SIZE, text="3")
+    grid_size_box = InputBox(66, INPUT_HEIGHT, BODY_SIZE, text="4")
     time_limit_box = InputBox(78, INPUT_HEIGHT, BODY_SIZE, text="5.0", decimal=True, max_len=5)
     transfer_checkbox = Checkbox(CHECK_SIZE, BODY_SIZE, "Allow Transfer Moves", checked=True)
     animation_checkbox = Checkbox(CHECK_SIZE, BODY_SIZE, "Animate Moves", checked=True)
