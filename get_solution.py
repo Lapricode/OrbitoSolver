@@ -16,6 +16,8 @@ import solve_game
 POSITION_NOT_FOUND = "Position is not in the tablebase."
 _DEFAULT_PLAYER_SYMBOLS = {0: "_", 1: "x", 2: "o"}
 _records_cache = {}   # (path, mtime, size) -> list of records
+_score_index = {}     # (path, mtime, size) -> {position id: score}
+MAX_CACHED_SCORES = 64   # a score map is tiny, so many files may stay around
 _ROTATION_ALIASES = {
     "clockwise": "clockwise",
     "cw": "clockwise",
@@ -110,29 +112,76 @@ def _record_path(base_dir, state, rotate_direction, transfer_allowed, player_tur
     )
 
 
-def _load_records(file_path):
-    """Read (and cache) the JSON array stored in ``file_path``.
+def _cache_key(file_path):
+    """The cache key of a tablebase file, or None when it cannot be read.
 
-    The cache key includes the file modification time and size, so a
-    regenerated tablebase is picked up without restarting the program.
+    The key includes the file modification time and size, so a regenerated
+    tablebase is picked up without restarting the program.
     """
     try:
         stat = os.stat(file_path)
-        key = (file_path, stat.st_mtime, stat.st_size)
     except OSError:
         return None
-    records = _records_cache.get(key)
-    if records is None:
-        try:
-            with open(file_path, "r", encoding="utf-8") as file:
-                records = json.load(file)
-        except (OSError, json.JSONDecodeError):
+    return file_path, stat.st_mtime, stat.st_size
+
+
+def _read_records(file_path):
+    """Read the JSON array stored in ``file_path``, or None."""
+    try:
+        with open(file_path, "r", encoding="utf-8") as file:
+            records = json.load(file)
+    except (OSError, json.JSONDecodeError):
+        return None
+    return records if isinstance(records, list) else None
+
+
+def _load_records(file_path):
+    """Read (and cache) the JSON array stored in ``file_path``, with its index.
+
+    Returns the ``(records, by_id)`` pair, where ``by_id`` maps every position
+    id to its record, so looking a position up does not have to walk the whole
+    array. The array itself is large, so only the file read last is kept.
+    """
+    key = _cache_key(file_path)
+    if key is None:
+        return None
+    loaded = _records_cache.get(key)
+    if loaded is None:
+        records = _read_records(file_path)
+        if records is None:
             return None
-        if not isinstance(records, list):
-            return None
+        by_id = {
+            record["id"]: record for record in records
+            if isinstance(record, dict) and isinstance(record.get("id"), str)
+        }
         _records_cache.clear()
-        _records_cache[key] = records
-    return records
+        _records_cache[key] = (records, by_id)
+    return _records_cache[key]
+
+
+def _scores_by_id(file_path, key):
+    """The ``{position id: score}`` map of a tablebase file, cached.
+
+    A stored score is all :func:`lookup_score` needs, and it is small enough to
+    keep for a good number of files, which matters because one evaluation walks
+    through every completion level of the game tree.
+    """
+    scores = _score_index.get(key)
+    if scores is None:
+        records = _read_records(file_path)
+        if records is None:
+            return None
+        scores = {
+            record["id"]: record["solution"].get("score") for record in records
+            if isinstance(record, dict)
+            and isinstance(record.get("id"), str)
+            and isinstance(record.get("solution"), dict)
+            and record["solution"].get("score") is not None
+        }
+        _score_index[key] = scores
+        while len(_score_index) > MAX_CACHED_SCORES:
+            _score_index.pop(next(iter(_score_index)))
+    return scores
 
 
 def _find_record(base_dir, state, rotate_direction, transfer_allowed, player_turn):
@@ -149,9 +198,10 @@ def _find_record(base_dir, state, rotate_direction, transfer_allowed, player_tur
         transfer_allowed,
         player_turn,
     )
-    records = _load_records(file_path)
-    if records is None:
+    loaded = _load_records(file_path)
+    if loaded is None:
         return None
+    records, by_id = loaded
 
     position_id = tablebase.get_position_id(
         state,
@@ -159,9 +209,9 @@ def _find_record(base_dir, state, rotate_direction, transfer_allowed, player_tur
         transfer_allowed,
         player_turn,
     )
-    for record in records:
-        if isinstance(record, dict) and record.get("id") == position_id:
-            return record
+    record = by_id.get(position_id)
+    if record is not None:
+        return record
 
     for record in records:
         if not isinstance(record, dict) or "position" not in record:
@@ -293,6 +343,13 @@ def _format_solution(
         f"  - Players:             {players_symbols[1]} and {players_symbols[2]}",
         f"  - Rotation direction:  {rotate_direction}",
         f"  - Transfers allowed:   {transfer_allowed}",
+    ]
+    identifier = record.get("id")
+    if identifier:
+        # the ID is what the tablebase files are keyed by, so the report can be
+        # traced back to the entry it came from
+        lines.append(f"  - Position ID:         {identifier}")
+    lines.extend([
         "",
         "Initial game state:",
         "",
@@ -300,7 +357,7 @@ def _format_solution(
         "",
         f"Start player: {players_symbols[player_turn]}",
         "",
-    ]
+    ])
 
     score = solution.get("score")
     if score is None:
@@ -350,6 +407,60 @@ def _normalise_lookup(
     if any(symbol not in symbols for symbol in (0, 1, 2)):
         raise ValueError("players_symbols must define symbols for 0, 1, and 2")
     return state_array, player, rotation, transfer, base_dir, symbols
+
+
+def lookup_score(
+    state,
+    player_turn,
+    rotate_direction="clockwise",
+    transfer_allowed=True,
+    base_dir=None,
+    grid_size=None,
+    tablebase_type="compressed",
+):
+    """Return the perfect score stored for a position, or None when absent.
+
+    :func:`lookup_solution` also gives the best move and the full perfect game,
+    which is a lot of work to do for a single number. Evaluating every move of a
+    position, and every reply to it, needs the score of hundreds of positions,
+    so this reads the score straight out of a small ``{position id: score}`` map
+    of the tablebase file and never formats a report.
+    """
+    state_array, player, rotation, transfer, base_dir, _symbols = _normalise_lookup(
+        state, player_turn, rotate_direction, transfer_allowed, base_dir, grid_size,
+        None, tablebase_type,
+    )
+    if tablebase_type == "compressed":
+        # the compressed tablebase stores one colour per position, so the
+        # position is turned into the one that is stored before it is looked up
+        representation = tablebase.compressed_representation(
+            state_array, player, rotation)
+        lookup_state = representation["state"]
+        lookup_rotation = representation["stored_rotation"]
+        lookup_player = 1
+    else:
+        lookup_state = state_array
+        lookup_rotation = rotation
+        lookup_player = player
+
+    file_path = _record_path(base_dir, lookup_state, lookup_rotation, transfer, lookup_player)
+    key = _cache_key(file_path)
+    if key is None:
+        return None
+    scores = _scores_by_id(file_path, key)
+    if scores is None:
+        return None
+    # the score is stored from the point of view of the player to move, which
+    # swapping the colours of the position does not change
+    position_id = tablebase.get_position_id(
+        lookup_state, lookup_rotation, transfer, lookup_player)
+    if position_id in scores:
+        return scores[position_id]
+    # a record without a usable id is only found by reading the file
+    record = _find_record(base_dir, lookup_state, lookup_rotation, transfer, lookup_player)
+    if record is None:
+        return None
+    return record.get("solution", {}).get("score")
 
 
 def lookup_solution(

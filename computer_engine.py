@@ -26,8 +26,10 @@ import time
 
 import numpy as np
 
+import create_game_tablebase
 import get_solution
 import orbital_logic_game_functions as olgf
+import retrograde_tablebase
 import solve_game
 
 
@@ -122,6 +124,203 @@ def move_to_text(move):
     return ", ".join(parts) if parts else "no move"
 
 
+RESULT_WIN = "win"
+RESULT_DRAW = "draw"
+RESULT_LOSS = "loss"
+RESULT_ORDER = {RESULT_WIN: 0, RESULT_DRAW: 1, RESULT_LOSS: 2}
+WIN_SCORE = 1000
+
+
+def result_of_score(score):
+    """Name the game result a score means for the player it is relative to."""
+    if score is None:
+        return None
+    if score > 0:
+        return RESULT_WIN
+    if score < 0:
+        return RESULT_LOSS
+    return RESULT_DRAW
+
+
+def moves_to_result(score):
+    """How many plies separate a win or a loss from the end of the game."""
+    if score is None or score == 0:
+        return None
+    return WIN_SCORE - abs(score)
+
+
+def position_score(state, player_turn, rotation, transfer_allowed, base_dir=None):
+    """Perfect ``(score, plies)`` of a stored position, or None when missing.
+
+    Every tablebase directory is asked in the order :func:`tablebase_entry` uses.
+    The retrograde value tables come first, because there a single array lookup
+    is the whole answer, and the JSON tablebase picks the positions up
+    afterwards: it also holds the boards no game from the empty board can reach,
+    such as a position drawn by hand in the editor. ``plies`` is None when only
+    the score is known.
+    """
+    for directory in tablebase_dirs(base_dir):
+        entry = retrograde_tablebase.stored_score(
+            directory, state, player_turn, rotation, transfer_allowed)
+        if entry is not None:
+            return entry
+        score = get_solution.lookup_score(
+            state=state,
+            player_turn=player_turn,
+            rotate_direction=rotation,
+            transfer_allowed=transfer_allowed,
+            base_dir=directory,
+        )
+        if score is not None:
+            return score, None
+    return None
+
+
+def evaluate_moves(
+    state,
+    player_turn,
+    rotation="clockwise",
+    transfer_allowed=True,
+    base_dir=None,
+    count_traps=True,
+):
+    """Evaluate every legal move of a position with the stored perfect scores.
+
+    Each move is played out and the resulting position is looked up in the
+    tablebase, so every move is described as a win, a draw or a loss **for the
+    player to move**, together with the number of plies the game still needs.
+    A stored score is measured from the position it belongs to, so the value of
+    a move is rebuilt around the plies left in the new position plus the one the
+    move itself used. The moves come back ordered as the player asked for them:
+    wins first, then draws, then losses, and inside each group the move that ends
+    the game soonest (wins) or lasts longest (losses) comes first.
+
+    Every entry is a dictionary:
+
+    - ``move``: the move, ready for :func:`orbital_logic_game_functions.play_turn`
+    - ``state``: the position the move leads to
+    - ``score``: the perfect score of the move for the player to move
+    - ``result``: ``"win"``, ``"draw"`` or ``"loss"``. A move that gives both
+      players a line at once is a draw, the way the game itself calls it.
+    - ``moves_to_result``: plies left until the game ends, None for a draw
+    - ``traps``: how many of the opponent's replies in the new position lose
+      for the opponent, the number of chances the move offers to slip up
+    - ``text``: one line describing the move, e.g. ``"add (1,1) -> Black wins"``
+
+    ``count_traps=False`` skips the ``traps`` count, which is what the counting
+    itself needs: it is one tablebase lookup per move of the opponent.
+
+    ``complete`` tells whether every legal move could be evaluated; it is False
+    when a resulting position is missing from the tablebase. An empty list means
+    the position itself is not stored.
+    """
+    state = np.asarray(state, dtype=int)
+    if player_turn not in (1, 2):
+        raise ValueError("player_turn must be 1 or 2")
+    if olgf.evaluate_game_state(state) is not None:
+        return [], True
+    opponent = 3 - player_turn
+    evaluated = []
+    complete = True
+    for move in olgf.get_possible_moves(state, rotation, transfer_allowed, player_turn):
+        following = olgf.play_turn(state, move)
+        finished = olgf.evaluate_game_state(following)
+        if finished == 0:
+            # the move ended the game, and it ended it in a draw: a rotation can
+            # give both players a line at the same time, which is not a loss
+            score = 0
+            plies = 1
+        elif finished is not None:
+            # the move ended the game, its score is settled on the spot
+            score = (WIN_SCORE - 1) if finished == player_turn else -(WIN_SCORE - 1)
+            plies = 1
+        else:
+            entry = position_score(following, opponent, rotation, transfer_allowed, base_dir)
+            if entry is None:
+                complete = False
+                continue
+            child_score, child_plies = entry
+            if child_plies is None:
+                # a position that is only stored as a score has no distance to
+                # count on, so the move keeps the stored one and reports none
+                score = -child_score
+                plies = None
+            else:
+                # a stored score is measured from the position it belongs to:
+                # the plies that are left in it. The move that led there is one
+                # more, and the value has to be rebuilt around that number. A
+                # plain negation of the score would be one ply too short, which
+                # is what turned a reply that loses into "loses at once".
+                plies = child_plies + 1
+                if child_score == 0:
+                    score = 0
+                else:
+                    distance = WIN_SCORE - plies
+                    score = distance if child_score < 0 else -distance
+        evaluated.append({
+            "move": move,
+            "state": following,
+            "score": score,
+            "result": result_of_score(score),
+            "moves_to_result": (plies if score != 0 else None),
+            "traps": (count_losing_replies(following, opponent, rotation,
+                                           transfer_allowed, base_dir)
+                      if count_traps else 0),
+            "text": move_result_text(move, score, player_turn, plies),
+        })
+    evaluated.sort(key=lambda item: (RESULT_ORDER[item["result"]],
+                                     -item["score"], -item["traps"]))
+    return evaluated, complete
+
+
+def count_losing_replies(state, player_turn, rotation, transfer_allowed, base_dir):
+    """How many of the moves of ``player_turn`` lose the game for them.
+
+    A position that wins for the player to move usually offers them more than
+    one way to play it, and every reply that ends up losing is a chance for the
+    opponent to make a bad next move. Counting them is what turns two moves of
+    the same score into a choice.
+    """
+    moves, _complete = evaluate_moves(
+        state, player_turn, rotation, transfer_allowed, base_dir, count_traps=False)
+    return sum(1 for item in moves if item["result"] == RESULT_LOSS)
+
+
+def move_result_text(move, score, player_turn, plies=None):
+    """One line describing a move and what it achieves for the player to move.
+
+    The line is written from the point of view of the player to move, so
+    "Black loses in 3 moves" is a move that hands the win to White, and the
+    report reads the same way down the whole list.
+
+    ``plies`` is the length of the perfect line that starts with this move, the
+    move itself included, so it is one more than the value of the position the
+    move leads to. It is taken from the score when it is not given.
+    """
+    move_text = move_to_text(move)
+    if score == 0:
+        return f"{move_text} -> draw"
+    if plies is None:
+        plies = moves_to_result(score)
+    outcome = "wins" if score > 0 else "loses"
+    if plies == 1:
+        return f"{move_text} -> {PLAYER_SYMBOLS[player_turn]} {outcome} at once"
+    return f"{move_text} -> {PLAYER_SYMBOLS[player_turn]} {outcome} in {plies} moves"
+
+
+def best_evaluated_move(evaluated):
+    """Pick the move of an evaluation list to actually play.
+
+    The perfect score decides, and moves of the same score are separated by the
+    number of losing replies they leave to the opponent, so the computer takes
+    the move that gives the opponent the most chances to slip up. That only
+    breaks ties, so the result of the game is the one the tablebase proves.
+    """
+    if not evaluated:
+        return None
+    return max(evaluated, key=lambda item: (item["score"], item["traps"]))["move"]
+
+
 def tablebase_entry(state, player_turn, rotation, transfer_allowed, base_dir=None):
     """Return the tablebase entry of a position, or None when absent.
 
@@ -150,6 +349,17 @@ def tablebase_entry(state, player_turn, rotation, transfer_allowed, base_dir=Non
         if entry is not None:
             return entry
     return None
+
+
+def position_id(state, player_turn, rotation="clockwise", transfer_allowed=True):
+    """The tablebase ID of a position: its board, its rules and its side to move.
+
+    This is the very string the tablebase files are keyed by, so a position can
+    be read from a report and looked up again in the JSON or the value tables. It
+    does not depend on the position being stored anywhere.
+    """
+    return create_game_tablebase.get_position_id(
+        state, rotation, transfer_allowed, player_turn)
 
 
 def _result(source, move=None, score=None, message="", **extra):
@@ -189,6 +399,14 @@ def choose_move(
     ``max_depth`` caps how far the minimax search may look, in moves; an
     answer that comes from the deepest allowed search is reported as not
     guaranteed, because the moves below the horizon were never examined.
+
+    A tablebase answer also carries ``moves``: every legal move of the position
+    with its perfect score, ordered wins, draws, losses (see
+    :func:`evaluate_moves`). ``move`` is then the best of them, ties broken by
+    the number of losing replies left to the opponent.
+
+    Every answer carries ``position_id``, the tablebase ID of the position (see
+    :func:`position_id`), whether or not a tablebase knows it.
     """
     state = np.asarray(state, dtype=int)
     if state.ndim != 2 or state.shape[0] != state.shape[1]:
@@ -198,6 +416,9 @@ def choose_move(
     if fallback not in FALLBACKS:
         raise ValueError(f"fallback must be one of: {', '.join(FALLBACKS)}")
     start = time.monotonic()
+    # every answer names the position it is about, stored or not, so a report
+    # can always be traced back to a tablebase entry
+    identifier = position_id(state, player_turn, rotation, transfer_allowed)
 
     if olgf.evaluate_game_state(state) is not None:
         return _result(
@@ -205,18 +426,29 @@ def choose_move(
             message="The game is already over.",
             player_turn=player_turn,
             elapsed=0.0,
+            position_id=identifier,
         )
 
     if use_tablebase:
         entry = tablebase_entry(state, player_turn, rotation, transfer_allowed, base_dir)
         if entry is not None and entry["best_move"] is not None:
+            evaluated, complete = evaluate_moves(
+                state, player_turn, rotation, transfer_allowed, base_dir)
+            # the tablebase decides the result, the traps only pick between the
+            # moves that reach it
+            best = best_evaluated_move(evaluated) or entry["best_move"]
+            counted = len(evaluated)
+            note = (f" of {counted} legal move{'' if counted == 1 else 's'}"
+                    if complete else
+                    f" of {counted} evaluated move{'' if counted == 1 else 's'}")
             return _result(
                 SOURCE_TABLEBASE,
-                move=entry["best_move"],
+                move=best,
                 score=entry["score"],
                 message=(
-                    f"Tablebase (perfect play): {move_to_text(entry['best_move'])} "
-                    f"-> {game_result_message(entry['score'], player_turn)}"
+                    f"Tablebase (perfect play, best{note}): "
+                    f"{move_to_text(best)} -> "
+                    f"{game_result_message(entry['score'], player_turn)}"
                 ),
                 player_turn=player_turn,
                 elapsed=time.monotonic() - start,
@@ -224,6 +456,8 @@ def choose_move(
                 moves_sequence=entry["moves_sequence"],
                 states_sequence=[np.asarray(item, dtype=int) for item in entry["states_sequence"]],
                 position_id=entry["id"],
+                moves=evaluated,
+                moves_complete=complete,
             )
 
     if fallback == FALLBACK_NONE:
@@ -232,6 +466,7 @@ def choose_move(
             message="This position is not in the tablebase.",
             player_turn=player_turn,
             elapsed=time.monotonic() - start,
+            position_id=identifier,
         )
 
     if fallback == FALLBACK_RANDOM:
@@ -245,6 +480,7 @@ def choose_move(
                 message="No legal move is available.",
                 player_turn=player_turn,
                 elapsed=time.monotonic() - start,
+                position_id=identifier,
             )
         return _result(
             SOURCE_RANDOM,
@@ -252,6 +488,7 @@ def choose_move(
             message=f"Random move (not in the tablebase): {move_to_text(move)}",
             player_turn=player_turn,
             elapsed=time.monotonic() - start,
+            position_id=identifier,
         )
 
     limit = clamp_time_limit(time_limit)
@@ -266,6 +503,7 @@ def choose_move(
             player_turn=player_turn,
             elapsed=time.monotonic() - start,
             search=info,
+            position_id=identifier,
         )
     depth = info["depth"]
     message = (
@@ -299,6 +537,7 @@ def choose_move(
         player_turn=player_turn,
         elapsed=time.monotonic() - start,
         search=info,
+        position_id=identifier,
     )
 
 
@@ -311,11 +550,21 @@ def worker(request_queue, result_queue):
         try:
             result = choose_move(**request)
         except Exception as error:  # never leave the front-end waiting forever
+            try:
+                identifier = position_id(
+                    request["state"],
+                    int(request.get("player_turn", 1)),
+                    request.get("rotation", "clockwise"),
+                    request.get("transfer_allowed", True),
+                )
+            except Exception:
+                identifier = None
             result = _result(
                 SOURCE_NONE,
                 message=f"Engine error: {type(error).__name__}: {error}",
                 player_turn=int(request.get("player_turn", 1)),
                 elapsed=0.0,
+                position_id=identifier,
                 error=f"{type(error).__name__}: {error}",
             )
         result_queue.put(result)

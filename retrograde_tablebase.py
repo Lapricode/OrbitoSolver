@@ -898,6 +898,35 @@ def build_record(base_dir, state, player_turn, rotate_direction, transfer_allowe
     )
 
 
+def stored_score(base_dir, state, player_turn, rotate_direction, transfer_allowed):
+    """Return ``(score, dtx)`` for a stored position, or None when it is missing.
+
+    This is the cheap counterpart of :func:`build_record`: the value is read
+    straight from the cached table, so evaluating a whole list of moves costs
+    one array lookup per position instead of a full formatted record.
+    ``score`` is the negamax value for ``player_turn`` and ``dtx`` the number of
+    plies to the end of the game, exactly as :meth:`ValueTable.entry` returns
+    them. The reflected counterpart rotation is tried as well, as in
+    :func:`build_record`.
+    """
+    state = tablebase._as_state(state)
+    grid_size = state.shape[0]
+    rotation = tablebase._canonical_rotation(rotate_direction)
+    transfer_allowed = bool(transfer_allowed)
+    player = int(player_turn)
+    for candidate in (rotation, _COUNTERPART_ROTATION.get(rotation)):
+        if candidate is None:
+            continue
+        table = load_table(base_dir, grid_size, candidate, transfer_allowed)
+        if table is None:
+            continue
+        probe = state if candidate == rotation else tablebase._apply_symmetry(state, _REFLECTION)
+        entry = table.entry(probe, player)
+        if entry is not None:
+            return entry
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Verification against the independent search
 # ---------------------------------------------------------------------------
