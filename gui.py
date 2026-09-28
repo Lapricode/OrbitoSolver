@@ -51,10 +51,12 @@ RESULT_COLORS = {   # the report of an evaluated position: win, draw and loss
     engine.RESULT_LOSS: (175, 15, 15),
 }
 
-PLAYER_FILL = {1: (15, 15, 15), 2: (250, 250, 250)}
-PLAYER_OUTLINE = {1: (250, 250, 250), 2: (15, 15, 15)}
-PLAYER_NAMES = {0: "Empty", 1: "Black", 2: "White"}
-FIRST_PLAYER = 2  # a fresh game always starts with the white pieces
+PLAYER_FILL = {1: (250, 250, 250), 2: (15, 15, 15)}
+PLAYER_OUTLINE = {1: (15, 15, 15), 2: (250, 250, 250)}
+PLAYER_NAMES = {0: "Empty", 1: "White", 2: "Black"}
+PLAYER_VALUES = {name: value for value, name in PLAYER_NAMES.items()}
+PLAYER_LABELS = [PLAYER_NAMES[value] for value in (0, 1, 2)]
+FIRST_PLAYER = 1  # a fresh game always starts with the white pieces
 PLAYER_SYMBOLS = {1: "x", 2: "o"}
 
 MIN_GRID_SIZE = 1
@@ -72,7 +74,7 @@ ADD_FADE_START = 0.50  # share of the move when the placed piece starts showing
 
 FILL = "fill"  # panel row width meaning "use the whole panel width"
 
-PIECE_VALUES = {"Empty": 0, "Black": 1, "White": 2}
+PIECE_VALUES = PLAYER_VALUES
 
 ENGINE_OPTIONS = {
     # radio button label: (look in the tablebase first, what to do otherwise)
@@ -1014,7 +1016,7 @@ def main():
 
     game = {
         "board": np.zeros((4, 4), dtype=int),
-        "player": FIRST_PLAYER,   # player to move (1 = Black, 2 = White)
+        "player": FIRST_PLAYER,   # player to move (1 = White, 2 = Black)
         "human": 1,         # the side the person at the keyboard plays
         "over": False,
         "message": "",
@@ -1142,9 +1144,7 @@ def main():
             return board, False, ""
         if result == 0:
             return board, True, "It's a draw!"
-        if result == 1:
-            return board, True, "Black wins!"
-        return board, True, "White wins!"
+        return board, True, f"{PLAYER_NAMES[result]} wins!"
 
     def reset_turn():
         game["move"] = {"transfer": {"source": None, "target": None}, "add": None}
@@ -1204,11 +1204,12 @@ def main():
     # ---------------- Position editor panel ----------------
     editor_hint = TextPanel(0, text_panel_height(2, small_font, titled=False),
                             small_font, scrollable=False, background=(240, 240, 244))
-    editor_piece_group = radio_group(BODY_SIZE,
-                                     ["Empty", "Black", "White"], default=1)
+    editor_piece_group = radio_group(BODY_SIZE, PLAYER_LABELS, default=1)
     # a game starts with the white pieces, so white is the side a drawn
     # position is prepared for unless it says otherwise
-    editor_turn_group = radio_group(BODY_SIZE, ["Black", "White"], default=1)
+    turn_labels = PLAYER_LABELS[1:]
+    editor_turn_group = radio_group(
+        BODY_SIZE, turn_labels, default=turn_labels.index(PLAYER_NAMES[FIRST_PLAYER]))
     editor_opponent_group = radio_group(BODY_SIZE,
                                         ["2 Players", "Vs Computer"], default=1)
     editor_opponent_computer = editor_opponent_group[1]
@@ -1542,14 +1543,14 @@ def main():
             stop_search()
             switch_mode("menu")
         elif action == "color":
-            game["human"] = 2
+            game["human"] = PIECE_VALUES[dialog_yes_button.text]
             if after is not None:
                 after()
 
     def confirm_no():
         action, after = close_dialog()
         if action == "color":
-            game["human"] = 1
+            game["human"] = PIECE_VALUES[dialog_no_button.text]
             if after is not None:
                 after()
 
@@ -1764,11 +1765,14 @@ def main():
             return "tablebase: not generated"
         return "tablebase: " + ", ".join(f"{size}x{size}" for size in tablebase_sizes)
 
+    def legend_text():
+        return f"Legend: {PLAYER_SYMBOLS[1]} = {PLAYER_NAMES[1]}, " \
+               f"{PLAYER_SYMBOLS[2]} = {PLAYER_NAMES[2]}."
+
     def cell_text(hover_cell):
         if hover_cell is None:
-            return f"Legend: {PLAYER_SYMBOLS[1]} = Black, {PLAYER_SYMBOLS[2]} = White."
-        return f"Cell: ({hover_cell[0]}, {hover_cell[1]})   " \
-               f"Legend: {PLAYER_SYMBOLS[1]} = Black, {PLAYER_SYMBOLS[2]} = White."
+            return legend_text()
+        return f"Cell: ({hover_cell[0]}, {hover_cell[1]})   " + legend_text()
 
     def draw_status(text, position_id=None):
         if position_id:
@@ -1834,7 +1838,7 @@ def main():
             "Position Editor lets you draw a position and ask the computer for "
             "the best move in it.\n"
             f"{tablebase_text()}\n"
-            f"Legend: {PLAYER_SYMBOLS[1]} = Black, {PLAYER_SYMBOLS[2]} = White."
+            f"{legend_text()}"
         )
 
     def draw_mode(screen, hover_cell):
@@ -1850,8 +1854,8 @@ def main():
         pygame.draw.rect(screen, (0, 0, 0), dialog_rect, 2)
         if dialog["action"] == "color":
             dialog_title.set_text("Which colour do you play?")
-            dialog_yes_button.set_text("White")
-            dialog_no_button.set_text("Black")
+            dialog_yes_button.set_text(PLAYER_NAMES[1])
+            dialog_no_button.set_text(PLAYER_NAMES[2])
         elif dialog["action"] == "restart":
             dialog_title.set_text("Restart game?")
             dialog_yes_button.set_text("Yes")

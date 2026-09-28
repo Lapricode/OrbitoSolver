@@ -10,7 +10,7 @@ Deeper technical notes on the solving machinery live in **[solver.md](solver.md)
 
 ## The game
 
-Each cell is empty, Black (`1`) or White (`2`). A turn has up to three phases:
+Each cell is empty, White (`1`) or Black (`2`). A turn has up to three phases:
 
 1. **Transfer** *(optional, if allowed)* — move one **opponent** piece to an orthogonally
    adjacent **empty** cell.
@@ -82,7 +82,7 @@ import numpy as np, get_solution, computer_engine, solve_game
 import orbital_logic_game_functions as olgf
 
 # Exact lookup (O(1) with a tablebase hit)
-board = np.array([[1,0,0],[2,0,0],[0,0,0]])          # White to move
+board = np.array([[1,0,0],[2,0,0],[0,0,0]])          # Black to move
 sol = get_solution.lookup_solution(board, player_turn=2,
                                    rotate_direction="clockwise", transfer_allowed=True)
 print(sol["score"], sol["game_result"])                # 995 player2_wins

@@ -54,7 +54,7 @@ SOURCE_RANDOM = "random"
 SOURCE_SEARCH = "search"
 SOURCE_NONE = "none"
 
-PLAYER_SYMBOLS = {0: "_", 1: "Black", 2: "White"}
+PLAYER_SYMBOLS = {0: "_", 1: "White", 2: "Black"}
 DEFAULT_TIME_LIMIT = 3.0
 MAX_TIME_LIMIT = 600.0
 MAX_SEARCH_DEPTH = 100
