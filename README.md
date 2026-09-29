@@ -41,7 +41,10 @@ board you are reasoning about.
   game.
 - **Animated moves** — the transferred piece flies to its target, the added piece fades in, then
   everything slides one ring step during the rotation.
-- Move builder, undo, restart, move log, winning-line highlighting, hints, resizable window.
+- Move builder, undo, restart, move log, winning-line highlighting, resizable window.
+- **Two computer buttons** — "Hint (ask the computer)" reports the best move without playing it,
+  and "Play Best Move" plays it. The editor offers the same pair, and a drawn position is always
+  asked about on its own terms, without the endgame presses of the game played before it.
 - **Endgame presses** — a full board without a line is finished by up to five forced presses,
   shown in the status bar as `endgame press 2 of 5`; clicking the board or "Complete Move" plays
   one, and the computer plays them on its own.

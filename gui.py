@@ -1027,6 +1027,7 @@ def main():
         "message_line": "",
         "position_id": None,
         "hint": None,       # move suggested by the hint button
+        "play_best": False,  # the answer was asked for to be played, not read
         "busy": False,      # a computer answer is on its way
         "busy_kind": "",    # "computer" or "hint"
         "busy_since": 0.0,
@@ -1040,6 +1041,10 @@ def main():
         "board": np.zeros((4, 4), dtype=int),
         "suggestion": None, # move suggested by the engine
         "position_id": None,
+        "play_best": False, # the answer was asked for to be played, not read
+        "pending_move": None,
+        "last_result": None,
+        "last_message": "",
         "busy": False,
         "busy_since": 0.0,
     }
@@ -1186,8 +1191,11 @@ def main():
     def stop_search():
         game["busy"] = False
         game["busy_kind"] = ""
+        game["play_best"] = False
         game["pending"] = None
         editor["busy"] = False
+        editor["play_best"] = False
+        editor["pending_move"] = None
         game_animator.clear()
         editor_animator.clear()
 
@@ -1235,7 +1243,7 @@ def main():
     menu_panel.add_row(START_BUTTON_HEIGHT, [(start_button, 0, FILL, START_BUTTON_HEIGHT)])
 
     # ---------------- Position editor panel ----------------
-    editor_hint = TextPanel(0, text_panel_height(10, small_font, titled=False),
+    editor_hint = TextPanel(0, text_panel_height(3, small_font, titled=False),
                             small_font, scrollable=False, background=(240, 240, 244))
     editor_piece_group = radio_group(BODY_SIZE, PLAYER_LABELS, default=1)
     # a game starts with the white pieces, so white is the side a drawn
@@ -1249,6 +1257,7 @@ def main():
     editor_engine_label = Label("Engine:", small_font)
     editor_apply_button = Button(78, INPUT_HEIGHT, BODY_SIZE, "Apply")
     editor_ask_button = Button(0, START_BUTTON_HEIGHT, HEADING_SIZE, "Ask Computer")
+    editor_best_button = Button(0, START_BUTTON_HEIGHT, HEADING_SIZE, "Play Best Move")
     editor_clear_button = Button(150, INPUT_HEIGHT, BODY_SIZE, "Clear Board")
     editor_play_button = Button(0, INPUT_HEIGHT, BODY_SIZE, "Play This Position")
     editor_report = TextPanel(0, 150, small_font, title="Report")
@@ -1275,6 +1284,8 @@ def main():
     editor_panel.add_row(LABEL_ROW_HEIGHT, [(editor_engine_label, 0, FILL, None)])
     editor_panel.add_row(START_BUTTON_HEIGHT,
                          [(editor_ask_button, 0, FILL, START_BUTTON_HEIGHT)])
+    editor_panel.add_row(START_BUTTON_HEIGHT,
+                         [(editor_best_button, 0, FILL, START_BUTTON_HEIGHT)])
     editor_panel.add_row(INPUT_HEIGHT, [
         (editor_clear_button, 0, 150, INPUT_HEIGHT),
         (editor_play_button, None, FILL, INPUT_HEIGHT),
@@ -1286,6 +1297,7 @@ def main():
     play_message = TextPanel(0, text_panel_height(3, small_font), small_font, title="Computer",
                              scrollable=True, background=(240, 240, 244))
     play_hint_button = Button(0, BUTTON_HEIGHT, BODY_SIZE, "Hint (ask the computer)")
+    play_best_button = Button(0, BUTTON_HEIGHT, BODY_SIZE, "Play Best Move")
     play_take_back_button = Button(0, BUTTON_HEIGHT, BODY_SIZE, "Take Back")
     play_complete_button = Button(0, BUTTON_HEIGHT, BODY_SIZE, "Complete Move")
     play_restart_button = Button(0, BUTTON_HEIGHT, BODY_SIZE, "Restart")
@@ -1298,6 +1310,7 @@ def main():
     play_panel.add_row(play_log.rect.height, [(play_log, 0, FILL, play_log.rect.height)])
     play_panel.add_row(play_message.rect.height, [(play_message, 0, FILL, play_message.rect.height)])
     play_panel.add_row(BUTTON_HEIGHT, [(play_hint_button, 0, FILL, BUTTON_HEIGHT)])
+    play_panel.add_row(BUTTON_HEIGHT, [(play_best_button, 0, FILL, BUTTON_HEIGHT)])
     play_panel.add_row(BUTTON_HEIGHT, [(play_take_back_button, 0, FILL, BUTTON_HEIGHT)])
     play_panel.add_row(BUTTON_HEIGHT, [(play_complete_button, 0, FILL, BUTTON_HEIGHT)])
     play_panel.add_row(BUTTON_HEIGHT, [(play_restart_button, 0, FILL, BUTTON_HEIGHT)])
@@ -1325,18 +1338,29 @@ def main():
     # ---------------- Computer engine ----------------
     engine_process = engine.EngineProcess()
 
-    def make_request(state, player, config):
-        """Build a picklable engine request out of the current settings."""
-        return dict(
+    def make_request(state, player, config, extra_turns=None):
+        """Build a picklable engine request out of the current settings.
+
+        ``extra_turns`` counts the endgame presses already played, which only a
+        running game knows. A drawn position is a fresh position, so it is asked
+        about with ``None`` and the counter is left out: the editor must not
+        inherit the press count of the game that was played before, or the
+        engine looks for presses that the drawn position has never seen.
+        """
+        request = dict(
             state=[[int(value) for value in row] for row in state],
             player_turn=int(player),
             rotation=current_rotation(),
             transfer_allowed=bool(transfer_checkbox.checked),
             extra_rotation_allowed=endgame_allowed(),
-            extra_turns=game["extra_turns"],
             time_limit=read_time_limit(),
             **config,
         )
+        if extra_turns is None:
+            request["extra_turns"] = game["extra_turns"]
+        else:
+            request["extra_turns"] = int(extra_turns)
+        return request
 
     def poll_engine():
         """Collect a finished answer from the engine process and use it."""
@@ -1537,9 +1561,22 @@ def main():
         game["hint"] = None
         play_move(result["move"], game["player"])
 
-    def request_hint():
-        """Ask the computer which move the human should play."""
+    def ask_for_move(play_it, name):
+        """Ask the engine for the best move in the running game.
+
+        The same question serves the two buttons: the hint button reads the
+        answer, the best move button plays it, and the flag says which was asked
+        for, so the answer that comes back is used the same way. A move that is
+        half built with the mouse is only left alone when the answer is going to
+        be played, because a hint can still be read next to it.
+        """
         if game["busy"] or game["over"] or game["pending"] is not None:
+            return
+        if game["blocked"]:
+            return
+        if vs_computer() and game["player"] != human_player():
+            return
+        if play_it and (game["phase"] != "none" or game["move"]["add"] is not None):
             return
         if not engine_process.submit(make_request(
                 game["board"], game["player"],
@@ -1547,14 +1584,31 @@ def main():
             return
         game["busy"] = True
         game["busy_kind"] = "hint"
+        game["play_best"] = bool(play_it)
         game["busy_since"] = time.monotonic()
-        game["message_line"] = f"{PLAYER_NAMES[game['player']]} is asking the computer..."
+        game["message_line"] = f"{PLAYER_NAMES[game['player']]} is {name}..."
+
+    def request_hint():
+        """Ask the computer which move the human should play."""
+        ask_for_move(False, "asking the computer")
+
+    def request_best_move():
+        """Ask the computer and play the move it prefers for the human."""
+        ask_for_move(True, "looking for the best move")
 
     def apply_hint(result):
         game["message_line"] = result["message"]
         game["hint"] = result["move"]
         game["position_id"] = result.get("position_id")
         play_report.set_blocks(editor_report_blocks(result))
+        if not game["play_best"]:
+            return
+        game["play_best"] = False
+        if result["move"] is None:
+            game["blocked"] = True
+            return
+        game["hint"] = None
+        play_move(result["move"], game["player"])
 
     def open_dialog(action, after=None):
         dialog["active"] = True
@@ -1600,6 +1654,8 @@ def main():
     def reset_editor():
         editor["suggestion"] = None
         editor["position_id"] = None
+        editor["play_best"] = False
+        editor["pending_move"] = None
         editor_report.set_text('Draw a position and press "Ask Computer".\n\n' + EDITOR_HELP)
 
     def selected_piece():
@@ -1623,7 +1679,15 @@ def main():
         reset_editor()
 
     def begin_editor_game():
-        """Put the drawn position on the board and hand its turn over."""
+        """Put the drawn position on the board and hand its turn over.
+
+        When the move came from the best move button the answer is carried over
+        into the game, so the report of the question that led to the move stays
+        readable, and the move itself is played right away.
+        """
+        pending = editor["pending_move"]
+        result = editor["last_result"]
+        message = editor["last_message"]
         stop_search()
         previous = game["board"]
         game["board"] = editor["board"].copy()
@@ -1641,6 +1705,11 @@ def main():
         reset_turn()
         game["board"], game["over"], game["message"] = evaluate_position(game["board"])
         switch_mode("playing")
+        if pending is not None and not game["over"]:
+            play_move(pending, game["player"])
+        if result is not None:
+            play_report.set_blocks(editor_report_blocks(result))
+            game["message_line"] = message
 
     def play_editor_position():
         """Start a game that begins from the drawn position."""
@@ -1650,17 +1719,30 @@ def main():
             return
         begin_editor_game()
 
-    def request_editor_answer():
-        """Ask the engine for the best move in the drawn position."""
+    def request_editor_answer(play_it=False):
+        """Ask the engine for the best move in the drawn position.
+
+        The drawn position is asked about on its own terms, without the endgame
+        presses of the game that was played before it. With ``play_it`` the
+        answer is not only reported: the game is started from the drawn position
+        and the move is played in it.
+        """
         if editor["busy"]:
             return
         if not engine_process.submit(make_request(
-                editor["board"], editor_player(), engine_config())):
+                editor["board"], editor_player(), engine_config(), extra_turns=0)):
             return
         editor["busy"] = True
+        editor["play_best"] = bool(play_it)
         editor["busy_since"] = time.monotonic()
         editor["suggestion"] = None
+        editor["pending_move"] = None
         editor_report.set_text("Asking the computer, please wait...")
+
+    def request_editor_best_move():
+        """Ask the engine, then start the drawn position and play its move."""
+        game["vs_computer"] = editor_opponent_computer.selected
+        request_editor_answer(play_it=True)
 
     def editor_report_blocks(result):
         """The report of an answered request as (text, color) blocks.
@@ -1705,8 +1787,21 @@ def main():
     def apply_editor_answer(result):
         editor["suggestion"] = result["move"]
         editor["position_id"] = result.get("position_id")
+        editor["last_result"] = result
+        editor["last_message"] = result["message"]
         editor_report.set_blocks(editor_report_blocks(result))
         editor_report.scroll = 0
+        if not editor["play_best"]:
+            return
+        editor["play_best"] = False
+        if result["move"] is None:
+            return
+        # the move was asked for, so it is played: the game starts from the drawn
+        # position, and the computer plays the side that was to move in it. The
+        # move stays pending until a game has been started with it, because the
+        # colour dialog is answered later, from the event loop.
+        editor["pending_move"] = result["move"]
+        play_editor_position()
 
     def editor_click(cell, button):
         if cell is None:
@@ -1778,8 +1873,10 @@ def main():
     play_restart_button.callback = lambda: open_dialog("restart")
     play_new_game_button.callback = lambda: open_dialog("new_game")
     play_hint_button.callback = request_hint
+    play_best_button.callback = request_best_move
     editor_apply_button.callback = apply_editor_size
     editor_ask_button.callback = request_editor_answer
+    editor_best_button.callback = request_editor_best_move
     editor_clear_button.callback = clear_editor
     editor_play_button.callback = play_editor_position
     dialog_yes_button.callback = confirm_yes

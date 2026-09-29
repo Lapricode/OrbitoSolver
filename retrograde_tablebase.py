@@ -58,6 +58,14 @@ on the ply parity and the side to move rather than on the player alone. The
 score needs no negation, because exchanging the colours is an isomorphism that
 preserves the value of the player to move.
 
+The four quarter turns of a board are the same game, and the enumeration reaches
+them together, so a position is stored in every turn or in none of them: the
+lookup needs no turn fallback. A board that is not stored is not one a game from
+the empty board produces, which with transfers allowed is a real restriction.
+A board like that is still a legal position, so the engine answers it with the
+search instead of claiming the tablebase knows it.
+
+
 Positions are enumerated with the children of terminal positions pruned, so the
 table only contains boards that can really occur in a game played from the
 empty board. Without that pruning the enumeration also produces boards where a
@@ -210,8 +218,8 @@ def board_index(codec, board, player_turn):
     The table stores games where player 1 started. A game where player 2 started
     is the same game with the colours exchanged, so it is answered from the
     colour-swapped board, where the side to move is exchanged as well. At an odd
-    ply the swapped board is not a player-1-started board, so the decision has
-    to take the ply parity into account: a position is stored exactly when the
+    ply the swapped board is not a player-1-started board, so the decision has to
+    take the ply parity into account: a position is stored exactly when the
     split of pieces between the two players matches the number of plies played
     and the side to move is the one the parity calls for.
     """
@@ -1147,6 +1155,13 @@ def _mid_endgame_problems(codec, board, player_turn, score, ply):
     per spent press, because the game is that much closer to its end. The engine
     entry point is called with the counter as well, so the parameter a caller
     passes is covered too.
+
+    A press turns the board, so the board a spent press leaves behind is not the
+    board the presses started from. Asking about the starting board with a spent
+    counter would ask about a position the game never reaches, and would report
+    the game as over a board whose line is still one press away. Every spent
+    press is therefore asked about on the board it produced, and the walk stops
+    as soon as a line is on the board, because the game has ended there.
     """
     cells = tuple(int(cell) for cell in np.asarray(board).ravel())
     if any(cell == 0 for cell in cells):
@@ -1158,12 +1173,16 @@ def _mid_endgame_problems(codec, board, player_turn, score, ply):
         return []
     problems = []
     winner, turns, _boards = outcome
+    later_cells = cells
     for spent in range(1, int(solve_game.EXTRA_TURNS) + 1):
+        if codec.perm is not None:
+            later_cells = tuple(later_cells[index] for index in codec.perm)
         later = solve_game.endgame_outcome(
-            cells, codec.perm, codec.lines_first_rest, codec.extra_rotation_allowed, spent,
+            later_cells, codec.perm, codec.lines_first_rest,
+            codec.extra_rotation_allowed, spent,
         )
         if later is None:
-            continue
+            break  # a press showed a line, so the game ended before this one
         later_winner, later_turns, _later_boards = later
         if later_winner != winner:
             problems.append(
@@ -1179,7 +1198,7 @@ def _mid_endgame_problems(codec, board, player_turn, score, ply):
                 f"{solve_game.endgame_score(winner, turns - spent, player_turn)}"
             )
         move, value = solve_game.find_best_move(
-            np.asarray(board, dtype=int).reshape((codec.grid_size, codec.grid_size)),
+            np.asarray(later_cells, dtype=int).reshape((codec.grid_size, codec.grid_size)),
             _rotation_of(codec),
             codec.transfer_allowed,
             player_turn,

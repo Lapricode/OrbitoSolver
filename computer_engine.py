@@ -447,6 +447,75 @@ def _result(source, move=None, score=None, message="", **extra):
     return result
 
 
+def _presses_note(moves_sequence):
+    """Say how many endgame presses a perfect line plays, if it plays any.
+
+    A position that is answered from the tablebase is answered with a line, and
+    the presses on that line are the presses the result is reached after, which
+    is the part a person reading the answer wants to know. A line without a press
+    says nothing, so nothing is added.
+    """
+    presses = sum(1 for move in (moves_sequence or ()) if olgf.is_rotation_only(move))
+    if presses == 0:
+        return ""
+    return f", reached after {presses} Orbito press{'' if presses == 1 else 'es'}"
+
+
+def _search_message(move, score, player_turn, info, limit, max_depth, use_tablebase):
+    """Describe a search answer, and say plainly how far it can be trusted.
+
+    The search is only asked when the tablebase has no entry, which happens for a
+    legal position that no game from the empty board produces (with transfers
+    allowed, a board can be perfectly legal and still unreachable) and for every
+    position when the user asked for the search alone. Two of its answers are
+    exact and must not be dressed up as guesses: a full board needs no search at
+    all, because the forced presses are the only move left, and a search that
+    proved its result inside the horizon it reached is right about it. Only a
+    search that ran out of time or of depth is reported as a best guess.
+    """
+    where = (
+        "not in the tablebase" if use_tablebase else "search only, as asked for"
+    )
+    outcome = f"{move_to_text(move)} -> {game_result_message(score, player_turn)}"
+    reason = info.get("reason", "")
+    depth = info.get("depth", 0)
+    if reason == "endgame":
+        # a full board: the presses that follow decide it, and they are forced
+        return (
+            f"Endgame presses ({where}): {outcome}. The presses are the only move "
+            f"left, so this is exact."
+        )
+    if reason == "proven":
+        return (
+            f"Minimax search ({where}): {outcome}. The search proved this inside "
+            f"{depth} move(s), so it is exact."
+        )
+    if depth == 0:
+        return (
+            f"Minimax search ({where}) could not finish its first pass in {limit:g}s, "
+            f"so this is the best ordered move only and the result is not "
+            f"guaranteed: {outcome}"
+        )
+    message = (
+        f"Minimax search ({where}): {outcome} "
+        f"(depth {depth} of at most {max_depth}, {info['nodes']} nodes, "
+        f"{info['elapsed']:.1f}s"
+        + (", timed out" if info.get("timed_out") else "")
+        + ")"
+    )
+    if reason == "max_depth":
+        message += (
+            f"\nThe search reached the maximum depth of {max_depth} moves, so the "
+            f"result is not guaranteed: the moves below that depth were not examined."
+        )
+    else:
+        message += (
+            "\nThe time ran out, so the deepest finished pass is reported and the "
+            "result is not guaranteed."
+        )
+    return message
+
+
 def choose_move(
     state,
     player_turn,
@@ -551,6 +620,7 @@ def choose_move(
                     f"Tablebase (perfect play, best{note}): "
                     f"{move_to_text(best)} -> "
                     f"{game_result_message(entry['score'], player_turn)}"
+                    + _presses_note(entry["moves_sequence"])
                 ),
                 player_turn=player_turn,
                 elapsed=time.monotonic() - start,
@@ -647,35 +717,13 @@ def choose_move(
             search=info,
             position_id=identifier,
         )
-    depth = info["depth"]
-    message = (
-        f"Minimax search (not in the tablebase): {move_to_text(move)} -> "
-        f"{game_result_message(score, player_turn)}"
-    )
-    if depth == 0:
-        message = (
-            f"Minimax search could not finish the first iteration in {limit:g}s, "
-            f"playing the best ordered move: {move_to_text(move)} "
-            f"(max depth {max_depth}; the result is not guaranteed)"
-        )
-    else:
-        message += (
-            f" (depth {depth} of at most {max_depth}, {info['nodes']} nodes, "
-            f"{info['elapsed']:.1f}s"
-            + (", timed out" if info["timed_out"] else "")
-            + ")"
-        )
-        if info["reason"] == "max_depth":
-            message += (
-                f"\nThe search reached the maximum depth of {max_depth} moves, so "
-                f"the result is not guaranteed: the moves below that depth were "
-                f"not examined."
-            )
     return _result(
         SOURCE_SEARCH,
         move=move,
         score=score,
-        message=message,
+        message=_search_message(
+            move, score, player_turn, info, limit, max_depth, use_tablebase,
+        ),
         player_turn=player_turn,
         elapsed=time.monotonic() - start,
         search=info,
