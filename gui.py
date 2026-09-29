@@ -32,6 +32,41 @@ LABEL_ROW_HEIGHT = 26
 BUTTON_HEIGHT = 44
 START_BUTTON_HEIGHT = 52
 
+# The borders between the areas of the window, and between the rows of a panel.
+# They are as wide as they are drawn, so they are easy to put hold of, and a
+# second press on one within DOUBLE_CLICK_TIME puts the areas back as they were.
+DIVIDER_SIZE = 7
+DIVIDER_COLOR = (110, 110, 120)
+DIVIDER_GRIP = (165, 165, 172)
+DIVIDER_HOT = (35, 85, 200)
+DIVIDER_GRIP_SIZE = 4
+DOUBLE_CLICK_TIME = 0.4
+
+# the cursor that goes with the border under the mouse, None being everywhere
+# else: the borders between the areas, and the ones between the rows of a panel
+RESIZE_CURSORS = {
+    None: pygame.SYSTEM_CURSOR_ARROW,
+    "vertical": pygame.SYSTEM_CURSOR_SIZEWE,
+    "horizontal": pygame.SYSTEM_CURSOR_SIZENS,
+    "rows": pygame.SYSTEM_CURSOR_SIZENS,
+}
+
+
+def set_resize_cursor(axis, shown):
+    """Show the cursor that belongs to the border under the mouse.
+
+    Returns the cursor that is on screen afterwards. A desktop that has no
+    cursor of that shape is no reason to stop the game, so a system that
+    refuses to make one keeps the arrow it had.
+    """
+    if axis == shown:
+        return shown
+    try:
+        pygame.mouse.set_cursor(RESIZE_CURSORS[axis])
+    except pygame.error:
+        return shown
+    return axis
+
 PANEL_COLOR = (226, 226, 230)
 INPUT_BACKGROUND = (250, 250, 250)
 BOARD_LIGHT = (176, 122, 70)
@@ -538,7 +573,15 @@ class TextPanel:
 
 
 class Panel:
-    """A scrollable column of widgets drawn on a coloured background."""
+    """A scrollable column of widgets drawn on a coloured background.
+
+    Most rows keep the height they were built with. A row added with a flex
+    weight instead grows into the space the fixed rows leave over, and the
+    dividers between the rows hand that space from one of those rows to the
+    next, so a text area can be given the room a report needs. The elastic rows
+    share the space in the proportion they are left in, which is what lets a
+    drag survive a resize of the panel itself.
+    """
 
     WHEEL_STEP = 26
 
@@ -550,50 +593,152 @@ class Panel:
         self.spacing = spacing
         self.scroll = 0
         self.rows = []
+        self.drag = None      # the row whose divider is held down
+        self.drag_y = 0       # where the mouse was when it took hold
+        self.pressed_at = -1.0  # when the divider was last pressed
 
-    def add_row(self, height, widgets, fill=False):
+    def add_row(self, height, widgets, fill=False, flex=0, min_height=0):
         """Add a row of ``(widget, x, width, height)`` items.
 
         ``x`` may be None to place the widget right after the previous one,
         ``width`` and ``height`` may be None to keep the natural size of the
         widget (centered inside the row), the width :data:`FILL` uses the rest
         of the panel and :data:`HALF` half of it, so a row of buttons shares the
-        width. A row added with ``fill`` takes the vertical space left over by
-        the other rows and stretches its widgets.
+        width. ``fill`` is a shorthand for a flex weight of one: the row takes
+        the space the fixed rows leave over instead of the height it was given,
+        while a flex weight of its own shares that space with the other elastic
+        rows. No row is laid out below ``min_height``, and the divider in front
+        of a row is only drawn when an elastic row lies on either side of it.
         """
-        self.rows.append({"height": height, "widgets": list(widgets), "fill": fill})
+        widgets = list(widgets)
+        natural = max([height] + [widget.rect.height for widget, _x, _w, _h in widgets])
+        self.rows.append({"widgets": widgets, "natural": natural, "size": natural,
+                          "flex": max(1, flex) if fill else max(0, flex),
+                          "min_height": max(0, min_height)})
         return self
 
     @property
     def content_width(self):
         return max(20, self.rect.width - 2 * self.padding)
 
-    def _row_height(self, row):
-        """Height a row needs without being stretched by a fill row."""
-        natural = max((widget.rect.height for widget, _x, _w, _h in row["widgets"]), default=0)
-        return max(row["height"], natural)
+    def elastic_rows(self):
+        """Indexes of the rows that grow with the space the fixed ones leave."""
+        return [index for index, row in enumerate(self.rows) if row["flex"]]
 
-    def _fixed_height(self):
-        """Height of every row that is not a fill row, gaps included."""
-        rows = [row for row in self.rows if not row["fill"]]
-        if not rows:
-            return 0
-        return sum(self._row_height(row) for row in rows) + self.gap * (len(rows) - 1)
+    def row_heights(self):
+        """Height every row is drawn with, in order.
 
-    def _fill_height(self):
-        """Height every fill row shares: what the other rows leave over."""
-        flexible = [row for row in self.rows if row["fill"]]
+        The fixed rows keep the height they were built with and the elastic ones
+        share what is left of the panel. They share it in the proportion the
+        dividers have put them in, so what a divider was dragged to still holds
+        once the panel itself is a different size.
+        """
+        sizes = [row["size"] for row in self.rows]
+        flexible = self.elastic_rows()
         if not flexible:
-            return 0
-        leftover = self.rect.height - 2 * self.padding - self._fixed_height()
-        return max(0, leftover // len(flexible))
+            return sizes
+        fixed = sum(size for size, row in zip(sizes, self.rows) if not row["flex"])
+        room = self.rect.height - 2 * self.padding - fixed
+        room -= self.gap * max(0, len(sizes) - 1)
+        floors = [self.rows[index]["min_height"] for index in flexible]
+        spare = max(0, room - sum(floors))
+        shares = [max(1, sizes[index] - floor) for index, floor in zip(flexible, floors)]
+        drawn = [floor + int(spare * share / sum(shares))
+                 for floor, share in zip(floors, shares)]
+        if spare:
+            # the shares are rounded down, hand what is left to the last row
+            drawn[-1] += room - sum(drawn)
+        for index, height in zip(flexible, drawn):
+            sizes[index] = height
+        return sizes
+
+    def row_tops(self, sizes=None):
+        """The screen height every row starts at, the scroll taken off."""
+        sizes = self.row_heights() if sizes is None else sizes
+        tops = []
+        y = self.rect.y + self.padding - int(self.scroll)
+        for height in sizes:
+            tops.append(y)
+            y += height + self.gap
+        return tops
+
+    def divider_bands(self, sizes=None):
+        """The divider in front of every row, and whether it can be dragged.
+
+        A divider is only shown on the edge of an elastic row that faces
+        another one: it hands the space of the row in front of it to the
+        nearest elastic row above and takes it from the nearest one below, so
+        the labels, inputs and buttons in between never change height. A
+        divider that would be half scrolled out of the panel is left out as
+        well, it is not there to grab.
+        """
+        sizes = self.row_heights() if sizes is None else sizes
+        tops = self.row_tops(sizes)
+        flexible = self.elastic_rows()
+        bands = []
+        for index in range(1, len(self.rows)):
+            middle = tops[index] - self.gap // 2
+            band = pygame.Rect(self.rect.x, middle - DIVIDER_SIZE // 2,
+                               self.rect.width, DIVIDER_SIZE)
+            opens = self.rows[index]["flex"] and any(row < index for row in flexible)
+            closes = self.rows[index - 1]["flex"] and any(row >= index for row in flexible)
+            shown = ((opens or closes)
+                     and tops[index - 1] >= self.rect.y
+                     and band.bottom <= self.rect.bottom)
+            bands.append((index, band, shown))
+        return bands
+
+    def divider_at(self, position):
+        """The row whose divider a mouse position is over, None when it is not
+        on one of them."""
+        for index, band, shown in self.divider_bands():
+            if shown and band.collidepoint(position):
+                return index
+        return None
+
+    def move_divider(self, index, distance):
+        """Push the divider in front of row ``index`` by ``distance`` pixels.
+
+        Only the two rows the divider trades between change: pushed down it
+        hands the space of the row in front of it to the nearest elastic row
+        above and takes it from the nearest one below, and the other way round
+        when it goes up. Each of them stops at its minimum height.
+        """
+        flexible = self.elastic_rows()
+        if not flexible or not distance:
+            return False
+        above = next((row for row in reversed(flexible) if row < index), None)
+        below = next((row for row in flexible if row >= index), None)
+        if above is None or below is None:
+            return False
+        # a divider pushed down hands the space to the row above it and takes
+        # it from the one below, and the other way round going up, so the row
+        # that gives the space away is the one on the side it moves away from
+        shrinks = below if distance > 0 else above
+        # the stored heights only carry the proportion the rows are in, so a
+        # pixel of the mouse has to be scaled to the size the rows are drawn at
+        floor = self.rows[shrinks]["min_height"]
+        stored = self.rows[shrinks]["size"]
+        drawn = self.row_heights()[shrinks]
+        scale = ((drawn - floor) / (stored - floor) if min(drawn, stored) > floor
+                 else drawn / stored if min(drawn, stored) > 0 else 1.0)
+        free = max(0, stored - floor) * scale
+        pixels = max(-free, min(free, distance)) / scale
+        if not pixels:
+            return False
+        self.rows[above]["size"] = max(0, self.rows[above]["size"] + pixels)
+        self.rows[below]["size"] = max(0, self.rows[below]["size"] - pixels)
+        return True
+
+    def reset_dividers(self):
+        """Give every row the height it was built with again."""
+        for row in self.rows:
+            row["size"] = row["natural"]
 
     def content_height(self):
         """Total height the rows need when nothing is scrolled out."""
-        fill_height = self._fill_height()
-        heights = [fill_height if row["fill"] else self._row_height(row) for row in self.rows]
-        gaps = self.gap * max(0, len(heights) - 1)
-        return max(0, sum(heights) + gaps)
+        heights = self.row_heights()
+        return max(0, sum(heights) + self.gap * max(0, len(heights) - 1))
 
     @property
     def max_scroll(self):
@@ -601,10 +746,8 @@ class Panel:
 
     def layout(self):
         """Give every widget its final on screen rectangle."""
-        fill_height = self._fill_height()
-        y = self.padding - int(self.scroll)
-        for row in self.rows:
-            height = fill_height if row["fill"] else self._row_height(row)
+        y = self.rect.y + self.padding - int(self.scroll)
+        for row, height in zip(self.rows, self.row_heights()):
             cursor = 0
             for widget, x, width, widget_height in row["widgets"]:
                 offset = cursor if x is None else x
@@ -617,7 +760,7 @@ class Panel:
                     final_width = widget.rect.width
                 else:
                     final_width = width
-                if row["fill"] and not widget_height:
+                if row["flex"] and not widget_height:
                     final_height = height
                 elif widget_height is None:
                     final_height = widget.rect.height
@@ -630,9 +773,39 @@ class Panel:
             y += height + self.gap
         self.scroll = max(0, min(self.max_scroll, self.scroll))
 
+    def draw_dividers(self, screen, sizes, mouse_pos):
+        """Draw the divider in front of every row that has one."""
+        for index, band, shown in self.divider_bands(sizes):
+            if not shown:
+                continue
+            hot = index == self.drag or band.collidepoint(mouse_pos)
+            grip = pygame.Rect(band.x + 8, band.centery - DIVIDER_GRIP_SIZE // 2,
+                               max(1, band.width - 16), DIVIDER_GRIP_SIZE)
+            pygame.draw.rect(screen, DIVIDER_HOT if hot else DIVIDER_COLOR, grip)
 
     def handle_event(self, event):
         self.layout()
+        if self.drag is not None:
+            if event.type == pygame.MOUSEMOTION:
+                self.move_divider(self.drag, event.pos[1] - self.drag_y)
+                self.drag_y = event.pos[1]
+                self.layout()
+                return True
+            if event.type in (pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP) and event.button == 1:
+                self.drag = None
+                return True
+            return False
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            index = self.divider_at(event.pos)
+            if index is not None:
+                if time.monotonic() - self.pressed_at < DOUBLE_CLICK_TIME:
+                    self.pressed_at = -1.0
+                    self.reset_dividers()
+                    return True
+                self.drag = index
+                self.drag_y = event.pos[1]
+                self.pressed_at = time.monotonic()
+                return True
         handled = False
         for row in self.rows:
             for widget, _x, _w, _h in row["widgets"]:
@@ -649,6 +822,7 @@ class Panel:
 
     def draw(self, screen):
         pygame.draw.rect(screen, self.background, self.rect)
+        sizes = self.row_heights()
         self.layout()
         previous_clip = screen.get_clip()
         screen.set_clip(self.rect)
@@ -664,6 +838,133 @@ class Panel:
             knob_y = track.y + int((track.height - knob_height) * self.scroll / self.max_scroll)
             pygame.draw.rect(screen, (120, 120, 120),
                              pygame.Rect(track.x, knob_y, track.width, knob_height))
+        self.draw_dividers(screen, sizes, pygame.mouse.get_pos())
+
+
+class Divider:
+    """A draggable border between two areas of the window.
+
+    ``axis`` is "vertical" for a border that moves left and right and
+    "horizontal" for one that moves up and down, and ``index`` says which of the
+    borders of the layout it is. Pressing it takes hold of it and the mouse then
+    pushes it along its own axis, as far as the areas allow. Pressing it a
+    second time in a row lets go and puts the areas back the way they started.
+    """
+
+    def __init__(self, areas, axis, index):
+        self.areas = areas
+        self.axis = axis
+        self.index = index
+        self.dragging = False
+        self.pressed_at = -1.0
+
+    @property
+    def position(self):
+        return self.areas.splits[self.index]
+
+    def band(self):
+        """The strip of screen the border takes hold of."""
+        center = self.position
+        if self.axis == "vertical":
+            return pygame.Rect(center - DIVIDER_SIZE // 2, 0, DIVIDER_SIZE, self.areas.height)
+        # the top border stops at the options panel, which has dividers of its own
+        return pygame.Rect(0, center - DIVIDER_SIZE // 2, center, DIVIDER_SIZE)
+
+    def handle_event(self, event):
+        if self.dragging:
+            if event.type == pygame.MOUSEMOTION:
+                self.areas.set_split(self.index,
+                                     event.pos[0] if self.axis == "vertical" else event.pos[1])
+                return True
+            if event.type in (pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP) and event.button == 1:
+                self.dragging = False
+                return True
+            return False
+        if (event.type == pygame.MOUSEBUTTONDOWN and event.button == 1
+                and self.band().collidepoint(event.pos)):
+            if time.monotonic() - self.pressed_at < DOUBLE_CLICK_TIME:
+                self.pressed_at = -1.0
+                self.areas.reset()
+                return True
+            self.dragging = True
+            self.pressed_at = time.monotonic()
+            return True
+        return False
+
+    def draw(self, screen, mouse_pos):
+        band = self.band()
+        hot = self.dragging or band.collidepoint(mouse_pos)
+        color = DIVIDER_HOT if hot else DIVIDER_COLOR
+        if self.axis == "vertical":
+            line = pygame.Rect(band.centerx - 1, 0, 2, self.areas.height)
+            grip = pygame.Rect(band.centerx - 4, band.centery - 22, 8, 44)
+        else:
+            line = pygame.Rect(0, band.centery - 1, band.width, 2)
+            grip = pygame.Rect(band.width // 2 - 22, band.centery - 4, 44, 8)
+        pygame.draw.rect(screen, color, line)
+        pygame.draw.rect(screen, color if hot else DIVIDER_GRIP, grip)
+
+
+class ScreenAreas:
+    """The three areas of the window and the two borders between them.
+
+    The board is a square in the top left corner, the text area takes what is
+    left of its column under it and the options panel the whole column on the
+    right. ``splits`` holds the borders: the first is the width of the board
+    column, the second the height of the board. Letting one of them grow takes
+    the difference off the board and hands it to the other areas, so the window
+    stays full and the three areas keep the room they were given. The board
+    cannot grow wider than its own column, which is what keeps it square
+    without ever leaving a gap beside it.
+    """
+
+    COLUMN, ROW = 0, 1
+    MIN_BOARD = 200   # neither the board nor its column gets any smaller
+    MIN_PANEL = 260   # the options panel keeps room for the labels in it
+    MIN_TEXT = 60     # the text area keeps a line or two
+
+    def __init__(self, width, height):
+        self.width = width
+        self.height = height
+        self.splits = [0, 0]
+        self.board_rect = pygame.Rect(0, 0, 0, 0)
+        self.status_rect = pygame.Rect(0, 0, 0, 0)
+        self.menu_rect = pygame.Rect(0, 0, 0, 0)
+        self.dividers = [Divider(self, "vertical", self.COLUMN),
+                         Divider(self, "horizontal", self.ROW)]
+        self.resize(width, height, reset=True)
+
+    def resize(self, width, height, reset=False):
+        """Follow the size of the window, keeping the borders where they are."""
+        self.width = max(2 * self.MIN_BOARD, int(width))
+        self.height = max(self.MIN_BOARD + self.MIN_TEXT, int(height))
+        if reset:
+            # the share of the window the built in layout gives each area
+            self.splits = [round(self.width * BOARD_SIZE / WINDOW_WIDTH),
+                           round(self.height * BOARD_SIZE / WINDOW_HEIGHT)]
+        self.update()
+
+    def reset(self):
+        """Put the borders back where the built in layout starts."""
+        self.resize(self.width, self.height, reset=True)
+
+    def set_split(self, index, position):
+        self.splits[index] = int(position)
+        self.update()
+
+    def update(self):
+        """Keep the borders inside the window and work out the areas."""
+        column = max(self.MIN_BOARD, min(self.width - self.MIN_PANEL, self.splits[self.COLUMN]))
+        row = max(self.MIN_BOARD, min(self.height - self.MIN_TEXT, self.splits[self.ROW]))
+        self.splits = [column, min(row, column)]
+        side = self.splits[self.ROW]
+        self.board_rect = pygame.Rect(0, 0, side, side)
+        self.status_rect = pygame.Rect(0, side, column, self.height - side)
+        self.menu_rect = pygame.Rect(column, 0, self.width - column, self.height)
+
+    def board_area(self):
+        """The square the board is drawn in, filled around the board itself."""
+        return pygame.Rect(0, 0, self.splits[self.COLUMN], self.board_rect.bottom)
 
 
 # ---------------------
@@ -1006,8 +1307,6 @@ def draw_board(screen, board_state, board_rect, hover_cell=None, highlights=(),
 
 def main():
     pygame.init()
-    board_width = BOARD_SIZE
-    menu_width = MENU_WIDTH
     screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.RESIZABLE)
     pygame.display.set_caption("Orbital Logic Game")
     clock = pygame.time.Clock()
@@ -1015,9 +1314,12 @@ def main():
     # ---------------- State ----------------
     mode_state = "menu"  # "menu", "playing" or "editor"
 
-    board_rect = pygame.Rect(0, 0, board_width, BOARD_SIZE)
-    status_rect = pygame.Rect(0, board_rect.bottom, board_width, STATUS_HEIGHT)
-    menu_rect = pygame.Rect(board_width, 0, menu_width, WINDOW_HEIGHT)
+    # the three areas of the window and the borders between them, which are
+    # dragged with the mouse; the rects below follow the borders
+    areas = ScreenAreas(WINDOW_WIDTH, WINDOW_HEIGHT)
+    board_rect = areas.board_rect
+    status_rect = areas.status_rect
+    menu_rect = areas.menu_rect
 
     game = {
         "board": np.zeros((4, 4), dtype=int),
@@ -1208,6 +1510,17 @@ def main():
         nonlocal mode_state
         mode_state = new_mode
 
+    def active_panel():
+        """The panel of the mode on screen, the one that takes the clicks."""
+        return {"menu": menu_panel, "playing": play_panel,
+                "editor": editor_panel}[mode_state]
+
+    def shown_board():
+        """The board on screen, None while the menu is up."""
+        if mode_state == "playing":
+            return game["board"]
+        return editor["board"] if mode_state == "editor" else None
+
     def add_radio_row(panel, group, row_height=RADIO_ROW_HEIGHT, first_x=0, gap=22):
         """Put a whole group of radio buttons side by side in a single row."""
         widgets = []
@@ -1245,9 +1558,13 @@ def main():
     for radio in completion_group:
         menu_panel.add_row(RADIO_ROW_HEIGHT, [(radio, 0, None, RADIO_ROW_HEIGHT)])
     start_button = Button(0, START_BUTTON_HEIGHT, HEADING_SIZE, "Start")
-    menu_panel.add_row(START_BUTTON_HEIGHT, [(start_button, 0, FILL, START_BUTTON_HEIGHT)])
+    menu_panel.add_row(START_BUTTON_HEIGHT, [(start_button, 0, FILL, START_BUTTON_HEIGHT)],
+                       fill=True, min_height=START_BUTTON_HEIGHT)
 
     # ---------------- Position editor panel ----------------
+    # a text area is never laid out below a title and a line of text, which is
+    # what the elastic rows share when the panel runs out of room
+    text_min_height = text_panel_height(1, small_font)
     editor_hint = TextPanel(0, text_panel_height(3, small_font, titled=False),
                             small_font, scrollable=False, background=(240, 240, 244))
     editor_piece_group = radio_group(BODY_SIZE, PLAYER_LABELS, default=1)
@@ -1269,7 +1586,8 @@ def main():
 
     editor_panel = Panel(menu_rect)
     editor_panel.add_row(46, [(Label("Position Editor", title_font), 0, None, None)])
-    editor_panel.add_row(editor_hint.rect.height, [(editor_hint, 0, FILL, editor_hint.rect.height)])
+    editor_panel.add_row(editor_hint.rect.height, [(editor_hint, 0, FILL, 0)],
+                         flex=1, min_height=editor_hint.rect.height)
     editor_panel.add_row(INPUT_HEIGHT, [
         (Label("Grid:", body_font), 0, None, None),
         (grid_size_box, None, 66, INPUT_HEIGHT),
@@ -1295,7 +1613,7 @@ def main():
         (editor_clear_button, 0, 150, INPUT_HEIGHT),
         (editor_play_button, None, FILL, INPUT_HEIGHT),
     ])
-    editor_panel.add_row(0, [(editor_report, 0, FILL, 0)], fill=True)
+    editor_panel.add_row(0, [(editor_report, 0, FILL, 0)], fill=True, min_height=text_min_height)
 
     # ---------------- Playing panel ----------------
     play_status_label = Label("", huge_font)
@@ -1312,8 +1630,10 @@ def main():
 
     play_panel = Panel(menu_rect)
     play_panel.add_row(46, [(play_status_label, 0, FILL, None)])
-    play_panel.add_row(play_log.rect.height, [(play_log, 0, FILL, play_log.rect.height)])
-    play_panel.add_row(play_message.rect.height, [(play_message, 0, FILL, play_message.rect.height)])
+    play_panel.add_row(play_log.rect.height, [(play_log, 0, FILL, 0)],
+                       flex=1, min_height=text_min_height)
+    play_panel.add_row(play_message.rect.height, [(play_message, 0, FILL, 0)],
+                       flex=1, min_height=text_min_height)
     play_panel.add_row(BUTTON_HEIGHT, [
         (play_hint_button, 0, HALF, BUTTON_HEIGHT),
         (play_best_button, None, HALF, BUTTON_HEIGHT),
@@ -1322,9 +1642,9 @@ def main():
     play_panel.add_row(BUTTON_HEIGHT, [(play_complete_button, 0, FILL, BUTTON_HEIGHT)])
     play_panel.add_row(BUTTON_HEIGHT, [(play_restart_button, 0, FILL, BUTTON_HEIGHT)])
     play_panel.add_row(BUTTON_HEIGHT, [(play_new_game_button, 0, FILL, BUTTON_HEIGHT)])
-    play_panel.add_row(0, [(play_report, 0, FILL, 0)], fill=True)
+    play_panel.add_row(0, [(play_report, 0, FILL, 0)], fill=True, min_height=text_min_height)
 
-    status_panel = TextPanel(board_width, STATUS_HEIGHT, small_font,
+    status_panel = TextPanel(areas.status_rect.width, areas.status_rect.height, small_font,
                              background=(240, 240, 243), scrollable=False)
     status_panel.rect = pygame.Rect(status_rect)
 
@@ -1889,21 +2209,26 @@ def main():
     dialog_yes_button.callback = confirm_yes
     dialog_no_button.callback = confirm_no
 
-    def handle_resize(width, height):
-        """Follow the window size: the board stays square, the panel is the rest."""
+    def layout_areas():
+        """Fill the areas the borders describe: the panels, the text area under
+        the board and the dialog in the middle of the window."""
         nonlocal board_rect, status_rect, menu_rect, dialog_rect
-        size = max(200, min(width - menu_width, height - 120))
-        board_rect = pygame.Rect(0, 0, size, size)
-        status_rect = pygame.Rect(0, size, size, max(60, height - size))
-        menu_rect = pygame.Rect(size, 0, max(200, width - size), height)
+        board_rect = areas.board_rect
+        status_rect = areas.status_rect
+        menu_rect = areas.menu_rect
         menu_panel.rect = pygame.Rect(menu_rect)
         editor_panel.rect = pygame.Rect(menu_rect)
         play_panel.rect = pygame.Rect(menu_rect)
         status_panel.rect = pygame.Rect(status_rect)
-        dialog_rect = pygame.Rect(width // 2 - 210, height // 2 - 100, 420, 200)
+        dialog_rect = pygame.Rect(areas.width // 2 - 210, areas.height // 2 - 100, 420, 200)
         place_dialog_widgets()
         for panel in (menu_panel, editor_panel, play_panel):
             panel.layout()
+
+    def handle_resize(width, height):
+        """Follow the window size, the borders staying where they were put."""
+        areas.resize(width, height)
+        layout_areas()
 
     # ---------------- Drawing ----------------
     def rules_text():
@@ -2034,8 +2359,7 @@ def main():
         dialog_no_button.draw(screen)
 
     # ---------------- Panels and initial texts ----------------
-    for panel in (menu_panel, editor_panel, play_panel):
-        panel.layout()
+    layout_areas()
     reset_editor()
     play_log.clear()
     status_panel.set_text(
@@ -2044,16 +2368,11 @@ def main():
     )
 
     # ---------------- Main loop ----------------
+    resize_cursor = None
     running = True
     while running:
         mouse_pos = pygame.mouse.get_pos()
-        if mode_state == "playing":
-            active_board = game["board"]
-        elif mode_state == "editor":
-            active_board = editor["board"]
-        else:
-            active_board = None
-        hover_cell = cell_at(mouse_pos, board_rect, active_board)
+        hover_cell = cell_at(mouse_pos, board_rect, shown_board())
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -2066,13 +2385,15 @@ def main():
                 dialog_yes_button.handle_event(event)
                 dialog_no_button.handle_event(event)
                 continue
-            if mode_state == "menu":
-                menu_panel.handle_event(event)
-            elif mode_state == "playing":
-                play_panel.handle_event(event)
+            # the borders of the areas are checked first, they sit on top of
+            # the panels they pass and a drag of one is theirs alone
+            if any(divider.handle_event(event) for divider in areas.dividers):
+                layout_areas()
+                continue
+            active_panel().handle_event(event)
+            if mode_state == "playing":
                 handle_board_click(event, hover_cell)
-            else:
-                editor_panel.handle_event(event)
+            elif mode_state == "editor":
                 handle_editor_click(event, hover_cell)
 
         poll_engine()
@@ -2081,10 +2402,22 @@ def main():
             request_computer_move()
         flush_pending()
 
+        # a border that was dragged has moved the board under the mouse
+        hover_cell = cell_at(mouse_pos, board_rect, shown_board())
+        panel = active_panel()
+        axis = next((divider.axis for divider in areas.dividers
+                     if divider.dragging or divider.band().collidepoint(mouse_pos)), None)
+        if axis is None and panel.divider_at(mouse_pos) is not None:
+            axis = "rows"
+        resize_cursor = set_resize_cursor(axis, resize_cursor)
+
         # --------------------- Drawing ---------------------
         screen.fill((200, 200, 200))
+        pygame.draw.rect(screen, PANEL_COLOR, areas.board_area())
         draw_mode(screen, hover_cell)
         status_panel.draw(screen)
+        for divider in areas.dividers:
+            divider.draw(screen, mouse_pos)
         if dialog["active"]:
             draw_dialog()
         pygame.display.flip()
