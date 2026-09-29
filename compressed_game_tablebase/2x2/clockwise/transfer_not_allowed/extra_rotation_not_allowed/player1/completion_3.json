@@ -1,0 +1,250 @@
+[
+  {
+    "id": "0111",
+    "position": [
+      [
+        0,
+        1
+      ],
+      [
+        1,
+        1
+      ]
+    ],
+    "solution": {
+      "score": 1000,
+      "game_result": "player1_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            0,
+            1
+          ],
+          [
+            1,
+            1
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "0112",
+    "position": [
+      [
+        0,
+        1
+      ],
+      [
+        1,
+        2
+      ]
+    ],
+    "solution": {
+      "score": 1000,
+      "game_result": "player1_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            0,
+            1
+          ],
+          [
+            1,
+            2
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "0121",
+    "position": [
+      [
+        0,
+        1
+      ],
+      [
+        2,
+        1
+      ]
+    ],
+    "solution": {
+      "score": 1000,
+      "game_result": "player1_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            0,
+            1
+          ],
+          [
+            2,
+            1
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "0122",
+    "position": [
+      [
+        0,
+        1
+      ],
+      [
+        2,
+        2
+      ]
+    ],
+    "solution": {
+      "score": -1000,
+      "game_result": "player2_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            0,
+            1
+          ],
+          [
+            2,
+            2
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "0211",
+    "position": [
+      [
+        0,
+        2
+      ],
+      [
+        1,
+        1
+      ]
+    ],
+    "solution": {
+      "score": 1000,
+      "game_result": "player1_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            0,
+            2
+          ],
+          [
+            1,
+            1
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "0212",
+    "position": [
+      [
+        0,
+        2
+      ],
+      [
+        1,
+        2
+      ]
+    ],
+    "solution": {
+      "score": -1000,
+      "game_result": "player2_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            0,
+            2
+          ],
+          [
+            1,
+            2
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "0221",
+    "position": [
+      [
+        0,
+        2
+      ],
+      [
+        2,
+        1
+      ]
+    ],
+    "solution": {
+      "score": -1000,
+      "game_result": "player2_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            0,
+            2
+          ],
+          [
+            2,
+            1
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "0222",
+    "position": [
+      [
+        0,
+        2
+      ],
+      [
+        2,
+        2
+      ]
+    ],
+    "solution": {
+      "score": -1000,
+      "game_result": "player2_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            0,
+            2
+          ],
+          [
+            2,
+            2
+          ]
+        ]
+      ]
+    }
+  }
+]

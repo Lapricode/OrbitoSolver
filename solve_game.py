@@ -18,12 +18,25 @@ import orbital_logic_game_functions as olgf
 # ordering heuristic. Only the public API below (minimax, find_best_move,
 # solve_game, simulate_principal_variation, estimated_game_result) converts
 # between numpy boards and the fast internal representation.
+#
+# The endgame presses
+# -------------------
+# When the last cell is filled and nobody holds a line, the board has no
+# empty cell left, so no piece can be added and nothing can be transferred.
+# The rules then hand the game to the Orbito button: the board is pressed
+# ``EXTRA_TURNS`` more times, and the first press that shows a line of n
+# decides the game; if no press shows one, the game is a draw. Because
+# nothing is placed, a press is nothing but a rotation, and the presses are
+# forced, so a position in the endgame has exactly one continuation. The
+# rule is optional (``extra_rotation_allowed``): switched off, a full board
+# without a line is simply the draw the endgame presses used to be.
 # ---------------------------------------------------------------------------
 
 WIN_SCORE = 1000          # same scale used by the original minimax
 INF = 10**9
 EXACT, LOWER, UPPER = 0, 1, 2
 TT_MAX = 4_000_000        # hard cap on transposition table entries
+EXTRA_TURNS = 5           # Orbito presses a full board without a line gets
 
 _grid_cache = {}          # n -> (lines, line_first_rest, cell_lines, neighbours, perm_cw, perm_ccw)
 
@@ -86,7 +99,7 @@ def _build_rotation_perm(n, clockwise):
     return tuple(perm)
 
 
-def _engine_params(n, rotate_direction, transfer_allowed):
+def _engine_params(n, rotate_direction, transfer_allowed, extra_rotation_allowed = True):
     """Bundle all per-search data into one object handed to the search."""
     lines_full, lines_first_rest, cell_lines, neighbours, perm_cw, perm_ccw = _build_grid(n)
     d = rotate_direction.lower() if isinstance(rotate_direction, str) else rotate_direction
@@ -96,7 +109,8 @@ def _engine_params(n, rotate_direction, transfer_allowed):
         perm = perm_ccw
     else:
         perm = None  # "still" (or invalid -> no rotation)
-    return (n, n * n, lines_full, lines_first_rest, cell_lines, neighbours, perm, transfer_allowed)
+    return (n, n * n, lines_full, lines_first_rest, cell_lines, neighbours, perm,
+            transfer_allowed, bool(extra_rotation_allowed))
 
 
 def _winner(b, lines_first_rest):
@@ -131,6 +145,65 @@ def _apply_move(b, move, player, perm, neighbours):
     if perm is None:
         return tuple(lst)
     return tuple(lst[i] for i in perm)
+
+
+def endgame_score(winner, turns, player):
+    """Negamax value of an endgame press sequence for the side to move.
+
+    ``winner`` is the player whose line the first press that shows one
+    completes, or 0 when the presses show no line at all or show one for both
+    players at once. ``turns`` is the number of presses the game took, counted
+    from the position the press sequence starts at, and ``player`` is the side
+    to move there. A draw is worth 0, everything else is ``WIN_SCORE`` less the
+    number of presses, so a faster win scores higher, exactly as in the search.
+    """
+    if winner == 0:
+        return 0
+    return WIN_SCORE - turns if winner == player else turns - WIN_SCORE
+
+
+def _endgame_presses(board, perm, lines_first_rest, presses):
+    """Turn a full board up to ``presses`` times and report what the presses show.
+
+    Returns ``(winner, turns, boards)``: the player whose line the first press
+    that shows one completes (0 when no press shows one, or one is shown for
+    both players at once), how many presses were needed, and the boards those
+    presses led to. A still rotation leaves the board as it is, so a game that
+    rotates by ``still`` never sees a line appear and always ends in a draw.
+    """
+    if presses <= 0:
+        return 0, 0, []
+    cells = board
+    boards = []
+    for turn in range(1, presses + 1):
+        cells = cells if perm is None else tuple(cells[i] for i in perm)
+        boards.append(cells)
+        winner = _winner(cells, lines_first_rest)
+        if winner is not None:
+            return winner, turn, boards
+    return 0, presses, boards
+
+
+def endgame_outcome(board, perm, lines_first_rest, extra_rotation_allowed, extra_turns = 0):
+    """The endgame presses of a position, or None when the position has none.
+
+    A position has endgame presses when the rule is switched on, the board is
+    full, and nobody holds a line yet. ``extra_turns`` counts how many of the
+    ``EXTRA_TURNS`` presses are already spent, which is not part of the board:
+    only the caller knows it, so the presses are replayed rather than read from
+    a table.
+
+    Returns the ``(winner, turns, boards)`` triple of :func:`_endgame_presses`,
+    with the number of presses left taken into account.
+    """
+    if not extra_rotation_allowed:
+        return None
+    if any(cell == 0 for cell in board):
+        return None
+    if _winner(board, lines_first_rest) is not None:
+        return None
+    spent = max(0, min(EXTRA_TURNS, int(extra_turns)))
+    return _endgame_presses(board, perm, lines_first_rest, EXTRA_TURNS - spent)
 
 
 def _gen_moves(b, player, transfer_allowed, neighbours, nn):
@@ -244,6 +317,21 @@ def _tick_clock():
         raise _SearchTimeout
 
 
+def _endgame_value(b, player, perm, lines_first_rest, extra_rotation_allowed, depth = 0):
+    """Value of a position without a single legal move.
+
+    With the endgame presses switched off a full board without a line is the
+    draw the game has always been. With them switched on the presses are
+    forced, so the value follows from the board alone: it is the outcome of the
+    first press that shows a line, ``depth`` presses further down the search.
+    """
+    outcome = endgame_outcome(b, perm, lines_first_rest, extra_rotation_allowed)
+    if outcome is None:
+        return 0
+    winner, turns, _boards = outcome
+    return endgame_score(winner, turns + depth, player)
+
+
 def _negamax(b, player, depth, alpha, beta, tt, P, exact_only=False):
     """Negamax with alpha/beta pruning and a transposition table.
 
@@ -255,7 +343,7 @@ def _negamax(b, player, depth, alpha, beta, tt, P, exact_only=False):
     bounds are trusted (used while reconstructing a principal variation)."""
     if _SEARCH_DEADLINE is not None:
         _tick_clock()
-    n, nn, lines_full, lines_first_rest, cell_lines, neighbours, perm, transfer_allowed = P
+    n, nn, lines_full, lines_first_rest, cell_lines, neighbours, perm, transfer_allowed, extra_rotation_allowed = P
 
     winner = _winner(b, lines_first_rest)
     if winner is not None:
@@ -288,7 +376,7 @@ def _negamax(b, player, depth, alpha, beta, tt, P, exact_only=False):
 
     moves = _gen_moves(b, player, transfer_allowed, neighbours, nn)
     if not moves:
-        return 0
+        return _endgame_value(b, player, perm, lines_first_rest, extra_rotation_allowed, depth)
     moves = _order_moves(moves, b, player, P, bm_hint)
 
     alpha_orig = alpha
@@ -320,7 +408,7 @@ def _best_move_at(b, player, depth, tt, P):
     """Exact search of the subtree rooted at (b, player) that returns only
     the very best move (used to reconstruct a principal variation without
     trusting the possibly-pruned move stored inside a bounded TT entry)."""
-    n, nn, lines_full, lines_first_rest, cell_lines, neighbours, perm, transfer_allowed = P
+    n, nn, lines_full, lines_first_rest, cell_lines, neighbours, perm, transfer_allowed, extra_rotation_allowed = P
     moves = _gen_moves(b, player, transfer_allowed, neighbours, nn)
     if not moves:
         return None
@@ -395,6 +483,46 @@ def _solve_root_moves_parallel(b, player, depth, moves, P, workers):
     return results, merged_tt
 
 
+def _endgame_answer(b, player, P, rotate_direction, n, extra_turns = 0):
+    """The single move of a position in the endgame, and its value.
+
+    The presses are forced, so a position that has them has exactly one
+    continuation: an Orbito press that only turns the board. ``(None, None)`` is
+    returned when the position has no legal move at all, which is what a full
+    board without a line is when the rule is switched off. Once every press is
+    spent the position is over, and the score is returned on its own.
+    """
+    outcome = endgame_outcome(b, P[6], P[3], P[8], extra_turns)
+    if outcome is None:
+        return None, None
+    winner, turns, _boards = outcome
+    score = endgame_score(winner, turns, player)
+    if turns <= 0:
+        return None, score
+    return olgf.rotation_only_move(player, rotate_direction), score
+
+
+def _endgame_line(b, player, P, rotate_direction, n, extra_turns = 0):
+    """The presses of the endgame as a move list, and the value they end on.
+
+    Returns ``(moves, states, score)``, or ``([], [], None)`` when the position
+    has no endgame presses. The moves are the forced presses, so a line that
+    runs into the endgame is finished by them instead of stopping short.
+    """
+    outcome = endgame_outcome(b, P[6], P[3], P[8], extra_turns)
+    if outcome is None:
+        return [], [], None
+    winner, turns, boards = outcome
+    moves = []
+    states = []
+    mover = player
+    for cells in boards:
+        moves.append(olgf.rotation_only_move(mover, rotate_direction))
+        mover = 3 - mover
+        states.append(np.array(cells, dtype = int).reshape(n, n))
+    return moves, states, endgame_score(winner, turns, player)
+
+
 def _move_to_dict(move, player, rotate_direction, n):
     """Convert a compact (transfer_source, transfer_dir, add_cell) move back
     into the dictionary format used by the public API."""
@@ -411,7 +539,7 @@ def _move_to_dict(move, player, rotate_direction, n):
 # Public API (same signatures and semantics as the original implementation)
 # ---------------------------------------------------------------------------
 
-def minimax(state, rotate_direction = "clockwise", transfer_allowed = True, player = 1, maximizing_player = None, depth = 0, alpha = -math.inf, beta = math.inf):
+def minimax(state, rotate_direction = "clockwise", transfer_allowed = True, player = 1, maximizing_player = None, depth = 0, alpha = -math.inf, beta = math.inf, extra_rotation_allowed = True):
     """
     Recursively evaluates the game tree using minimax with alpha-beta pruning.
     Parameters:
@@ -423,12 +551,13 @@ def minimax(state, rotate_direction = "clockwise", transfer_allowed = True, play
         depth: current depth of recursion (used to favor faster wins/longer delays of losses)
         alpha: the best already explored option along the path to the maximizer
         beta: the best already explored option along the path to the minimizer
+        extra_rotation_allowed: whether a full board without a line is decided by the EXTRA_TURNS Orbito presses
     Returns:
         An evaluation score: high positive if maximizing_player wins, high negative if loses, or 0 for a draw.
     """
     if maximizing_player is None:
         maximizing_player = player
-    P = _engine_params(state.shape[0], rotate_direction, transfer_allowed)
+    P = _engine_params(state.shape[0], rotate_direction, transfer_allowed, extra_rotation_allowed)
     b = tuple(state.ravel().tolist())
     value = _negamax(b, player, depth, -INF if alpha == -math.inf else alpha,
                      INF if beta == math.inf else beta, {}, P)
@@ -437,7 +566,7 @@ def minimax(state, rotate_direction = "clockwise", transfer_allowed = True, play
     return value
 
 
-def find_best_move(state, rotate_direction = "clockwise", transfer_allowed = True, player = 1, workers = None):
+def find_best_move(state, rotate_direction = "clockwise", transfer_allowed = True, player = 1, workers = None, extra_rotation_allowed = True, extra_turns = 0):
     """
     Determines the best move for the given player from the current state.
     Parameters:
@@ -445,16 +574,19 @@ def find_best_move(state, rotate_direction = "clockwise", transfer_allowed = Tru
         player: the player whose move is to be determined (1 or 2)
         workers: optional number of worker processes used to evaluate the
             root move subtrees in parallel (None / 1 = single process)
+        extra_rotation_allowed: whether a full board without a line is decided by the EXTRA_TURNS Orbito presses
+        extra_turns: how many of those presses have already been played
     Returns:
         A tuple (best_move, best_value) where best_move is the move (a dictionary)
-        and best_value is its minimax evaluation.
+        and best_value is its minimax evaluation. A position in the endgame has a
+        single forced continuation, an Orbito press that only turns the board.
     """
     n = state.shape[0]
-    P = _engine_params(n, rotate_direction, transfer_allowed)
+    P = _engine_params(n, rotate_direction, transfer_allowed, extra_rotation_allowed)
     b = tuple(state.ravel().tolist())
     moves = _gen_moves(b, player, P[7], P[5], P[1])
     if not moves:
-        return None, -math.inf
+        return _endgame_answer(b, player, P, rotate_direction, n, extra_turns)
     moves = _order_moves(moves, b, player, P, None)
     best = -INF
     best_move = None
@@ -479,7 +611,7 @@ def find_best_move(state, rotate_direction = "clockwise", transfer_allowed = Tru
     return _move_to_dict(best_move, player, rotate_direction, n), best
 
 
-def find_random_move(state, rotate_direction = "clockwise", transfer_allowed = True, player = 1, rng = None):
+def find_random_move(state, rotate_direction = "clockwise", transfer_allowed = True, player = 1, rng = None, extra_rotation_allowed = True, extra_turns = 0):
     """
     Picks one legal move at random, which is useful for quick games and as a
     fallback for a computer opponent that should not think too hard.
@@ -489,16 +621,20 @@ def find_random_move(state, rotate_direction = "clockwise", transfer_allowed = T
         transfer_allowed: whether transfers are allowed between adjacent cells
         player: the player whose move is chosen (1 or 2)
         rng: an optional random.Random instance (a fresh one is used when omitted)
+        extra_rotation_allowed: whether a full board without a line is decided by the EXTRA_TURNS Orbito presses
+        extra_turns: how many of those presses have already been played
     Returns:
         A tuple (move, value) where move is a random legal move (a dictionary) and
-        value is always None, or (None, None) when no move is available.
+        value is always None, or (None, None) when no move is available. A position
+        in the endgame has only the forced press, so that is the move returned.
     """
     n = state.shape[0]
-    P = _engine_params(n, rotate_direction, transfer_allowed)
+    P = _engine_params(n, rotate_direction, transfer_allowed, extra_rotation_allowed)
     b = tuple(state.ravel().tolist())
     moves = _gen_moves(b, player, P[7], P[5], P[1])
     if not moves:
-        return None, None
+        move, _value = _endgame_answer(b, player, P, rotate_direction, n, extra_turns)
+        return move, None
     generator = random if rng is None else rng
     move = generator.choice(moves)
     return _move_to_dict(move, player, rotate_direction, n), None
@@ -559,7 +695,7 @@ def _search_with_deadline(b, player, P, deadline, max_depth):
     return best_move, best_value, best_depth, top_moves, timed_out, reason
 
 
-def find_best_move_within_time(state, rotate_direction = "clockwise", transfer_allowed = True, player = 1, time_limit = 1.0, max_depth = None, top_moves_count = 5):
+def find_best_move_within_time(state, rotate_direction = "clockwise", transfer_allowed = True, player = 1, time_limit = 1.0, max_depth = None, top_moves_count = 5, extra_rotation_allowed = True, extra_turns = 0):
     """
     Determines the best move the search can find within a limited amount of
     thinking time, using iterative deepening. Deeper iterations only start
@@ -572,8 +708,10 @@ def find_best_move_within_time(state, rotate_direction = "clockwise", transfer_a
         player: the player whose move is chosen (1 or 2)
         time_limit: maximum thinking time in seconds (must be positive)
         max_depth: optional cap on the searched depth in moves; ``None`` means
-        the search is only bounded by ``time_limit``
+            the search is only bounded by ``time_limit``
         top_moves_count: how many alternatives to report in the info dictionary
+        extra_rotation_allowed: whether a full board without a line is decided by the EXTRA_TURNS Orbito presses
+        extra_turns: how many of those presses have already been played
     Returns:
         A tuple (best_move, best_value, info) where best_move is a move
         (a dictionary), best_value is its minimax evaluation (None when even the
@@ -581,17 +719,25 @@ def find_best_move_within_time(state, rotate_direction = "clockwise", transfer_a
         "depth", "max_depth", "nodes", "elapsed", "timed_out", "reason" and
         "top_moves" details. ``reason`` tells why the deepening stopped, so the
         caller can warn when the answer comes from the deepest allowed search.
+        A position in the endgame needs no search: it returns the forced press
+        and the value of the presses that follow it, with reason "endgame".
     """
     n = state.shape[0]
     time_limit = float(time_limit)
     if not time_limit > 0:
         raise ValueError("time_limit must be positive")
-    P = _engine_params(n, rotate_direction, transfer_allowed)
+    P = _engine_params(n, rotate_direction, transfer_allowed, extra_rotation_allowed)
     b = tuple(state.ravel().tolist())
     if not _gen_moves(b, player, P[7], P[5], P[1]):
-        return None, None, {"depth": 0, "max_depth": max_depth, "nodes": 0,
-                            "elapsed": 0.0, "timed_out": False,
-                            "reason": "no_moves", "top_moves": []}
+        info = {"depth": 0, "max_depth": max_depth, "nodes": 0,
+                "elapsed": 0.0, "timed_out": False,
+                "reason": "no_moves", "top_moves": []}
+        move, value = _endgame_answer(b, player, P, rotate_direction, n, extra_turns)
+        if move is None:
+            return None, None, info
+        info["reason"] = "endgame"
+        return move, value, info
+
     start = time.monotonic()
     _start_search(start + time_limit)
     try:
@@ -615,15 +761,18 @@ def find_best_move_within_time(state, rotate_direction = "clockwise", transfer_a
     return _move_to_dict(best_move, player, rotate_direction, n), best_value, info
 
 
-def simulate_principal_variation(state, rotate_direction = "clockwise", transfer_allowed = True, player = 1, max_steps = 50):
+def simulate_principal_variation(state, rotate_direction = "clockwise", transfer_allowed = True, player = 1, max_steps = 50, extra_rotation_allowed = True):
     """
     Simulate a possible evolution of the game (the principal variation) by alternately choosing best moves.
     Parameters:
         state: the starting game state (a numpy array)
         player: the player whose turn it is (1 or 2)
         max_steps: maximum number of moves to simulate to avoid infinite loops
+        extra_rotation_allowed: whether a full board without a line is decided by the EXTRA_TURNS Orbito presses
     Returns:
         A list of game states representing the evolution from the current state.
+        The forced presses of the endgame are part of it, so a line that reaches a
+        full board is followed through to the end of the game.
     """
     evolution = [{"move": None, "state": state}]
     current_state = state
@@ -632,7 +781,8 @@ def simulate_principal_variation(state, rotate_direction = "clockwise", transfer
     while steps < max_steps:
         if olgf.evaluate_game_state(current_state) is not None:
             break
-        best_move, score = find_best_move(current_state, rotate_direction, transfer_allowed, current_player)
+        best_move, score = find_best_move(current_state, rotate_direction, transfer_allowed, current_player,
+                                          extra_rotation_allowed = extra_rotation_allowed)
         if best_move is None:
             break
         current_state = olgf.play_turn(current_state, best_move)
@@ -663,7 +813,7 @@ def estimated_game_result(score, players_symbols = {1: "x", 2: "o", 0: "_"}, sta
         return "It's a draw!"
 
 
-def solve_game(state, rotate_direction = "clockwise", transfer_allowed = True, player = 1, maximizing_player = None, depth = 0, alpha = -math.inf, beta = math.inf, workers = None):
+def solve_game(state, rotate_direction = "clockwise", transfer_allowed = True, player = 1, maximizing_player = None, depth = 0, alpha = -math.inf, beta = math.inf, workers = None, extra_rotation_allowed = True):
     """
     Recursively solves the game from the given state, returning a dictionary with:
         - "score": the minimax evaluation score,
@@ -679,15 +829,18 @@ def solve_game(state, rotate_direction = "clockwise", transfer_allowed = True, p
         depth: current depth of recursion (used to favor faster wins/longer losses)
         alpha: best value found so far for the maximizer
         beta: best value found so far for the minimizer
+        extra_rotation_allowed: whether a full board without a line is decided by the EXTRA_TURNS Orbito presses
 
     Returns:
         A dictionary with keys "score", "states_sequence", and "moves_sequence".
+        A line that ends in the endgame is followed through the forced presses, so
+        the returned sequence reaches the actual end of the game.
     """
     if maximizing_player is None:
         maximizing_player = player
 
     n = state.shape[0]
-    P = _engine_params(n, rotate_direction, transfer_allowed)
+    P = _engine_params(n, rotate_direction, transfer_allowed, extra_rotation_allowed)
     b = tuple(state.ravel().tolist())
 
     tt = {}
@@ -703,7 +856,7 @@ def solve_game(state, rotate_direction = "clockwise", transfer_allowed = True, p
         else:
             root_moves = _gen_moves(b, player, P[7], P[5], P[1])
             if not root_moves:
-                value = 0
+                value = _endgame_value(b, player, P[6], P[3], extra_rotation_allowed, depth)
             else:
                 root_moves = _order_moves(root_moves, b, player, P, None)
                 try:
@@ -732,6 +885,10 @@ def solve_game(state, rotate_direction = "clockwise", transfer_allowed = True, p
         else:
             move = _best_move_at(cur, p, d, tt, P)
         if move is None:
+            # No move left: with the rule on, the forced presses finish the game.
+            press_moves, press_states, _score = _endgame_line(cur, p, P, rotate_direction, n)
+            moves_seq.extend(press_moves)
+            states_seq.extend(press_states)
             break
         moves_seq.append(_move_to_dict(move, p, rotate_direction, n))
         cur = _apply_move(cur, move, p, P[6], P[5])

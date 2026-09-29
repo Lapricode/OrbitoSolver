@@ -170,5 +170,4 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
-game_tablebase/4x4/
 compressed_game_tablebase/4x4/

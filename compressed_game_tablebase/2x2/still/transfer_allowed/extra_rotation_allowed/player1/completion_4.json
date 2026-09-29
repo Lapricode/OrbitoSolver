@@ -1,0 +1,188 @@
+[
+  {
+    "id": "1111",
+    "position": [
+      [
+        1,
+        1
+      ],
+      [
+        1,
+        1
+      ]
+    ],
+    "solution": {
+      "score": 1000,
+      "game_result": "player1_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            1,
+            1
+          ],
+          [
+            1,
+            1
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "1112",
+    "position": [
+      [
+        1,
+        1
+      ],
+      [
+        1,
+        2
+      ]
+    ],
+    "solution": {
+      "score": 1000,
+      "game_result": "player1_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            1,
+            1
+          ],
+          [
+            1,
+            2
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "1122",
+    "position": [
+      [
+        1,
+        1
+      ],
+      [
+        2,
+        2
+      ]
+    ],
+    "solution": {
+      "score": 0,
+      "game_result": "draw",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            1,
+            1
+          ],
+          [
+            2,
+            2
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "1221",
+    "position": [
+      [
+        1,
+        2
+      ],
+      [
+        2,
+        1
+      ]
+    ],
+    "solution": {
+      "score": 0,
+      "game_result": "draw",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            1,
+            2
+          ],
+          [
+            2,
+            1
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "1222",
+    "position": [
+      [
+        1,
+        2
+      ],
+      [
+        2,
+        2
+      ]
+    ],
+    "solution": {
+      "score": -1000,
+      "game_result": "player2_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            1,
+            2
+          ],
+          [
+            2,
+            2
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "2222",
+    "position": [
+      [
+        2,
+        2
+      ],
+      [
+        2,
+        2
+      ]
+    ],
+    "solution": {
+      "score": -1000,
+      "game_result": "player2_wins",
+      "best_move": null,
+      "moves_sequence": [],
+      "states_sequence": [
+        [
+          [
+            2,
+            2
+          ],
+          [
+            2,
+            2
+          ]
+        ]
+      ]
+    }
+  }
+]

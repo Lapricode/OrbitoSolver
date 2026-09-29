@@ -1,0 +1,264 @@
+[
+  {
+    "id": "000000000",
+    "position": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0
+      ]
+    ],
+    "solution": {
+      "score": 0,
+      "game_result": "draw",
+      "best_move": {
+        "player": 1,
+        "transfer": null,
+        "add": [
+          0,
+          0
+        ],
+        "rotate": "clockwise"
+      },
+      "moves_sequence": [
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            0
+          ],
+          "rotate": "clockwise"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            0,
+            0
+          ],
+          "rotate": "clockwise"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            1,
+            1
+          ],
+          "rotate": "clockwise"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            1,
+            0
+          ],
+          "rotate": "clockwise"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            2,
+            0
+          ],
+          "rotate": "clockwise"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            1,
+            2
+          ],
+          "rotate": "clockwise"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            1,
+            0
+          ],
+          "rotate": "clockwise"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            2,
+            2
+          ],
+          "rotate": "clockwise"
+        }
+      ],
+      "states_sequence": [
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            0,
+            2,
+            1
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            0,
+            0,
+            2
+          ],
+          [
+            0,
+            1,
+            1
+          ],
+          [
+            0,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            2,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            2
+          ],
+          [
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            1,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            2
+          ]
+        ],
+        [
+          [
+            1,
+            0,
+            2
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            1,
+            2,
+            2
+          ]
+        ],
+        [
+          [
+            1,
+            1,
+            0
+          ],
+          [
+            1,
+            1,
+            2
+          ],
+          [
+            2,
+            2,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            1,
+            1
+          ],
+          [
+            2,
+            1,
+            0
+          ],
+          [
+            2,
+            2,
+            2
+          ]
+        ]
+      ]
+    }
+  }
+]

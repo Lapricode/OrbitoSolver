@@ -10,6 +10,13 @@ counterclockwise_rotation_keywords = ["counterclockwise", "ccw", "+", "1"]
 stand_still_keywords = ["still", "s", "x", "0"]
 players_symbols_default = {1: "x", 2: "o", 0: "_"}
 
+# Key that marks a move as a press of the Orbito button that only turns the
+# board. Those are the moves of the endgame: the board is full, so there is
+# nothing to add and no empty cell to transfer a piece into, and the press
+# only rotates. See :func:`rotation_only_move` and the endgame rule in
+# ``solve_game``.
+rotation_only_key = "rotation_only"
+
 # caches used by the optimized rotation / encoding helpers
 _rotation_perms = {}     # (n, is_clockwise) -> numpy permutation for flat arrays
 _ring_index_cache = {}   # n -> list of ring index arrays (flat indices, in ring order)
@@ -134,6 +141,31 @@ def rotate_board(state, rotate_direction = "clockwise", out = None):
         return out
     return rotated
 
+def board_is_full(state):
+    '''
+    tell whether the board has no empty cell left, so that no piece can be added
+    '''
+    return not bool(np.any(np.asarray(state) == 0))
+
+
+def is_rotation_only(next_move):
+    '''
+    tell whether a move is an Orbito press that only turns the board
+    next_move is a move dictionary, as built by :func:`rotation_only_move`
+    '''
+    return bool(next_move) and bool(next_move.get(rotation_only_key))
+
+
+def rotation_only_move(player = 1, rotate_direction = "clockwise"):
+    '''
+    build the move of an Orbito press that only turns the board
+    it is the move of the endgame, played once the last cell is filled: with
+    every cell occupied there is no transfer and no add, only the rotation
+    '''
+    return {"player": player, "transfer": None, "add": None,
+            "rotate": rotate_direction, rotation_only_key: True}
+
+
 # make a player's turn
 def play_turn(state, next_move):
     '''
@@ -143,6 +175,8 @@ def play_turn(state, next_move):
     "transfer" for the transfer move of an opponent's piece to an adjacent cell (optional),
     "add" for the add move of a player's piece to an empty cell (optional),
     "rotate" for the direction of the board rotation
+    a move carrying the "rotation_only" key is an Orbito press of the endgame:
+    every cell is occupied, so only the rotation is played
     '''
     state_copy = state.copy()
     n = state.shape[0]
@@ -151,6 +185,8 @@ def play_turn(state, next_move):
     add = next_move["add"]  # position of the piece to be added
     rotate = next_move["rotate"]  # direction of the board rotation
     opponent = 3 - player
+    if is_rotation_only(next_move):
+        return rotate_board(state_copy, str(rotate), out = state_copy)  # a press only turns the board
     # transfer move of an opponent's piece to an adjacent cell
     # 4 possible directions: "u" for up, "d" for down, "l" for left, "r" for right
     if transfer is not None:
@@ -187,6 +223,9 @@ def get_possible_moves(state, rotate_direction = "clockwise", transfer_allowed =
     return a list of all possible moves for a player, from the current game state
     player is 1 for player 1 and 2 for player 2
     rotate_direction is clockwise, counterclockwise, or still
+    a full board has no empty cell, so the list is empty there: the Orbito
+    presses of the endgame are not moves, they are built by
+    :func:`rotation_only_move`
     '''
     n = state.shape[0]
     rows = state.tolist()

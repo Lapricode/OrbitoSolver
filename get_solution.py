@@ -97,9 +97,21 @@ def _normalise_transfer_allowed(transfer_allowed):
     return bool(transfer_allowed)
 
 
-def _record_path(base_dir, state, rotate_direction, transfer_allowed, player_turn):
+def _normalise_extra_rotation_allowed(extra_rotation_allowed):
+    if isinstance(extra_rotation_allowed, str):
+        value = extra_rotation_allowed.strip().lower()
+        if value in {"true", "1", "yes", "allowed"}:
+            return True
+        if value in {"false", "0", "no", "not_allowed"}:
+            return False
+        raise ValueError("extra_rotation_allowed must be true or false")
+    return bool(extra_rotation_allowed)
+
+
+def _record_path(base_dir, state, rotate_direction, transfer_allowed, extra_rotation_allowed, player_turn):
     grid_size = state.shape[0]
-    transfer_folder = "transfer_allowed" if transfer_allowed else "transfer_not_allowed"
+    transfer_folder = tablebase._transfer_name(transfer_allowed)
+    extra_folder = tablebase._extra_rotation_name(extra_rotation_allowed)
     player_folder = "player1" if player_turn == 1 else "player2"
     completion = int(np.count_nonzero(state))
     return os.path.join(
@@ -107,6 +119,7 @@ def _record_path(base_dir, state, rotate_direction, transfer_allowed, player_tur
         f"{grid_size}x{grid_size}",
         rotate_direction,
         transfer_folder,
+        extra_folder,
         player_folder,
         f"completion_{completion}.json",
     )
@@ -184,7 +197,7 @@ def _scores_by_id(file_path, key):
     return scores
 
 
-def _find_record(base_dir, state, rotate_direction, transfer_allowed, player_turn):
+def _find_record(base_dir, state, rotate_direction, transfer_allowed, extra_rotation_allowed, player_turn):
     """Return the JSON tablebase record for a position, or None.
 
     Only reached for positions the retrograde value tables do not cover, either
@@ -196,6 +209,7 @@ def _find_record(base_dir, state, rotate_direction, transfer_allowed, player_tur
         state,
         rotate_direction,
         transfer_allowed,
+        extra_rotation_allowed,
         player_turn,
     )
     loaded = _load_records(file_path)
@@ -203,12 +217,7 @@ def _find_record(base_dir, state, rotate_direction, transfer_allowed, player_tur
         return None
     records, by_id = loaded
 
-    position_id = tablebase.get_position_id(
-        state,
-        rotate_direction,
-        transfer_allowed,
-        player_turn,
-    )
+    position_id = tablebase.position_state_id(state)
     record = by_id.get(position_id)
     if record is not None:
         return record
@@ -318,6 +327,9 @@ def _map_compressed_record(record, representation, state, rotate_direction):
 
     mapped_record = dict(record)
     mapped_record["position"] = np.asarray(state, dtype=int).tolist()
+    # the record now describes the position that was asked about, so it is
+    # identified by that position
+    mapped_record["id"] = tablebase.position_state_id(state)
     mapped_record["solution"] = mapped_solution
     return mapped_record
 
@@ -328,6 +340,7 @@ def _format_solution(
     player_turn,
     rotate_direction,
     transfer_allowed,
+    extra_rotation_allowed,
     players_symbols,
 ):
     solution = record.get("solution", {})
@@ -344,11 +357,13 @@ def _format_solution(
         f"  - Rotation direction:  {rotate_direction}",
         f"  - Transfers allowed:   {transfer_allowed}",
     ]
-    identifier = record.get("id")
-    if identifier:
-        # the ID is what the tablebase files are keyed by, so the report can be
-        # traced back to the entry it came from
-        lines.append(f"  - Position ID:         {identifier}")
+    if extra_rotation_allowed:
+        lines.append(
+            f"  - Endgame presses:     {int(solve_game.EXTRA_TURNS)} more Orbito presses"
+        )
+    identifier = tablebase.position_state_id(state)
+    # the ID of the position itself: one digit per cell, row by row
+    lines.append(f"  - Position ID:         {identifier}")
     lines.extend([
         "",
         "Initial game state:",
@@ -378,6 +393,17 @@ def _format_solution(
             move_player = moves_sequence[move_number].get("player")
             if move_player not in (1, 2):
                 move_player = player_turn if move_number == 0 else 3 - player_turn
+            if olgf.is_rotation_only(moves_sequence[move_number]):
+                press_number = sum(
+                    1 for item in moves_sequence[:move_number + 1]
+                    if olgf.is_rotation_only(item)
+                )
+                lines.extend([
+                    "",
+                    f"Move {move_number + 1} ({players_symbols[move_player]}) : {move} "
+                    f"(endgame press {press_number} of {int(solve_game.EXTRA_TURNS)})",
+                ])
+                continue
             lines.extend([
                 "",
                 f"Move {move_number + 1} ({players_symbols[move_player]}) : {move}",
@@ -391,22 +417,22 @@ def _normalise_lookup(
     player_turn,
     rotate_direction,
     transfer_allowed,
+    extra_rotation_allowed,
     base_dir,
     grid_size,
     players_symbols,
-    tablebase_type,
 ):
     """Validate the lookup parameters shared by the public entry points."""
     state_array = _state_from_input(state, grid_size)
     player = _normalise_player(player_turn)
     rotation = _normalise_rotation(rotate_direction)
     transfer = _normalise_transfer_allowed(transfer_allowed)
-    tablebase_type = tablebase.normalise_tablebase_type(tablebase_type)
-    base_dir = tablebase.default_base_dir(tablebase_type) if base_dir is None else base_dir
+    extra_rotation = _normalise_extra_rotation_allowed(extra_rotation_allowed)
+    base_dir = tablebase.default_base_dir() if base_dir is None else base_dir
     symbols = dict(_DEFAULT_PLAYER_SYMBOLS if players_symbols is None else players_symbols)
     if any(symbol not in symbols for symbol in (0, 1, 2)):
         raise ValueError("players_symbols must define symbols for 0, 1, and 2")
-    return state_array, player, rotation, transfer, base_dir, symbols
+    return state_array, player, rotation, transfer, extra_rotation, base_dir, symbols
 
 
 def lookup_score(
@@ -414,50 +440,55 @@ def lookup_score(
     player_turn,
     rotate_direction="clockwise",
     transfer_allowed=True,
+    extra_rotation_allowed=True,
     base_dir=None,
     grid_size=None,
-    tablebase_type="compressed",
 ):
     """Return the perfect score stored for a position, or None when absent.
 
     :func:`lookup_solution` also gives the best move and the full perfect game,
     which is a lot of work to do for a single number. Evaluating every move of a
     position, and every reply to it, needs the score of hundreds of positions,
-    so this reads the score straight out of a small ``{position id: score}`` map
-    of the tablebase file and never formats a report.
+    so this reads the score straight out of the stored value table, or out of a
+    small ``{position id: score}`` map of the JSON file, and never formats a
+    report.
     """
-    state_array, player, rotation, transfer, base_dir, _symbols = _normalise_lookup(
-        state, player_turn, rotate_direction, transfer_allowed, base_dir, grid_size,
-        None, tablebase_type,
+    (
+        state_array, player, rotation, transfer, extra_rotation, base_dir, _symbols,
+    ) = _normalise_lookup(
+        state, player_turn, rotate_direction, transfer_allowed, extra_rotation_allowed,
+        base_dir, grid_size, None,
     )
-    if tablebase_type == "compressed":
-        # the compressed tablebase stores one colour per position, so the
-        # position is turned into the one that is stored before it is looked up
-        representation = tablebase.compressed_representation(
-            state_array, player, rotation)
-        lookup_state = representation["state"]
-        lookup_rotation = representation["stored_rotation"]
-        lookup_player = 1
-    else:
-        lookup_state = state_array
-        lookup_rotation = rotation
-        lookup_player = player
+    # the compressed tablebase stores one colour per position, so the position
+    # is turned into the one that is stored before it is looked up
+    representation = tablebase.compressed_representation(state_array, player, rotation)
+    lookup_state = representation["state"]
+    lookup_rotation = representation["stored_rotation"]
+    lookup_player = 1
 
-    file_path = _record_path(base_dir, lookup_state, lookup_rotation, transfer, lookup_player)
+    stored = retrograde_tablebase.stored_score(
+        base_dir, lookup_state, lookup_player, lookup_rotation, transfer, extra_rotation,
+    )
+    if stored is not None:
+        # the score is stored from the point of view of the player to move, which
+        # swapping the colours of the position does not change
+        return stored[0]
+
+    file_path = _record_path(
+        base_dir, lookup_state, lookup_rotation, transfer, extra_rotation, lookup_player)
     key = _cache_key(file_path)
     if key is None:
         return None
     scores = _scores_by_id(file_path, key)
     if scores is None:
         return None
-    # the score is stored from the point of view of the player to move, which
-    # swapping the colours of the position does not change
-    position_id = tablebase.get_position_id(
-        lookup_state, lookup_rotation, transfer, lookup_player)
+    position_id = tablebase.position_state_id(lookup_state)
     if position_id in scores:
         return scores[position_id]
     # a record without a usable id is only found by reading the file
-    record = _find_record(base_dir, lookup_state, lookup_rotation, transfer, lookup_player)
+    record = _find_record(
+        base_dir, lookup_state, lookup_rotation, transfer, extra_rotation, lookup_player,
+    )
     if record is None:
         return None
     return record.get("solution", {}).get("score")
@@ -468,17 +499,18 @@ def lookup_solution(
     player_turn,
     rotate_direction="clockwise",
     transfer_allowed=True,
+    extra_rotation_allowed=True,
     base_dir=None,
     grid_size=None,
     players_symbols=None,
-    tablebase_type="compressed",
 ):
     """Return a structured tablebase entry for a position, or None.
 
     The returned dictionary always contains:
 
     - ``state``: the queried position as a numpy array,
-    - ``player_turn``, ``rotation``, ``transfer_allowed``: the rule context,
+    - ``player_turn``, ``rotation``, ``transfer_allowed`` and
+      ``extra_rotation_allowed``: the rule context,
     - ``best_move``, ``moves_sequence``, ``states_sequence``, ``score`` and
       ``game_result``: the stored solution, already mapped back to the
       orientation and colours of the queried position,
@@ -487,16 +519,17 @@ def lookup_solution(
     ``score`` is always expressed from the point of view of ``player_turn``
     (the player to move), and ``best_move`` is a move dictionary ready to be
     passed to ``orbital_logic_game_functions.play_turn``. ``None`` is returned
-    when the position is not part of the selected tablebase. A rotating position
-    is answered from the other rotation as well, because the two are the same
-    game seen in a mirror, so a base directory that stored only the clockwise
-    tables still answers counterclockwise queries.
+    when the position is not part of the tablebase. A rotating position is
+    answered from the other rotation as well, because the two are the same game
+    seen in a mirror, so a base directory that stored only the clockwise tables
+    still answers counterclockwise queries.
     """
     (
         state_array,
         player,
         rotation,
         transfer,
+        extra_rotation,
         base_dir,
         symbols,
     ) = _normalise_lookup(
@@ -504,12 +537,11 @@ def lookup_solution(
         player_turn,
         rotate_direction,
         transfer_allowed,
+        extra_rotation_allowed,
         base_dir,
         grid_size,
         players_symbols,
-        tablebase_type,
     )
-    tablebase_type = tablebase.normalise_tablebase_type(tablebase_type)
 
     record = retrograde_tablebase.build_record(
         base_dir,
@@ -517,47 +549,40 @@ def lookup_solution(
         player,
         rotation,
         transfer,
+        extra_rotation,
     )
     if record is not None:
         return _build_entry(
-            record, state_array, player, rotation, transfer,
-            base_dir, tablebase_type, symbols,
+            record, state_array, player, rotation, transfer, extra_rotation,
+            base_dir, symbols,
         )
 
-    if tablebase_type == "compressed":
-        representation = tablebase.compressed_representation(
-            state_array,
-            player,
-            rotation,
-        )
-        lookup_state = representation["state"]
-        lookup_rotation = representation["stored_rotation"]
-        lookup_player = 1
-    else:
-        representation = None
-        lookup_state = state_array
-        lookup_rotation = rotation
-        lookup_player = player
-
+    # the compressed tablebase stores one colour per position, so the position
+    # is turned into the one that is stored before it is looked up
+    representation = tablebase.compressed_representation(
+        state_array,
+        player,
+        rotation,
+    )
     record = _find_record(
         base_dir,
-        lookup_state,
-        lookup_rotation,
+        representation["state"],
+        representation["stored_rotation"],
         transfer,
-        lookup_player,
+        extra_rotation,
+        1,
     )
     if record is None:
         return None
-    if representation is not None:
-        record = _map_compressed_record(
-            record,
-            representation,
-            state_array,
-            rotation,
-        )
+    record = _map_compressed_record(
+        record,
+        representation,
+        state_array,
+        rotation,
+    )
     return _build_entry(
-        record, state_array, player, rotation, transfer,
-        base_dir, tablebase_type, symbols,
+        record, state_array, player, rotation, transfer, extra_rotation,
+        base_dir, symbols,
     )
 
 
@@ -567,8 +592,8 @@ def _build_entry(
     player,
     rotation,
     transfer,
+    extra_rotation,
     base_dir,
-    tablebase_type,
     symbols,
 ):
     """Assemble the public lookup result from a tablebase record."""
@@ -582,9 +607,9 @@ def _build_entry(
         "player_turn": player,
         "rotation": rotation,
         "transfer_allowed": transfer,
+        "extra_rotation_allowed": extra_rotation,
         "base_dir": base_dir,
-        "tablebase_type": tablebase_type,
-        "id": record.get("id"),
+        "id": tablebase.position_state_id(state_array),
         "best_move": _move_for_engine(moves_sequence[0]) if moves_sequence else None,
         "moves_sequence": [_move_for_engine(move) for move in moves_sequence],
         "states_sequence": _state_sequence(record, state_array, moves_sequence),
@@ -596,20 +621,54 @@ def _build_entry(
             player,
             rotation,
             transfer,
+            extra_rotation,
             symbols,
         ),
     }
 
 
-def available_grid_sizes(base_dir=None, tablebase_type="compressed"):
+def _stored_contexts(base_dir, grid_size):
+    """The rule contexts of a grid size that this version can actually read.
+
+    Both tablebases keep the endgame rule in the path, so a table that was
+    built before the presses existed has no such folder and cannot be loaded.
+    Only the contexts of the current layout are reported.
+    """
+    found = []
+    for rotation, transfer_allowed, extra_rotation_allowed in \
+            retrograde_tablebase.available_contexts(base_dir, grid_size):
+        if os.path.isfile(retrograde_tablebase.context_file(
+                base_dir, grid_size, rotation, transfer_allowed,
+                extra_rotation_allowed)):
+            found.append((rotation, transfer_allowed, extra_rotation_allowed))
+    grid_folder = os.path.join(str(base_dir), f"{int(grid_size)}x{int(grid_size)}")
+    for rotation in sorted(set(_ROTATION_ALIASES.values())):
+        rotation_folder = os.path.join(grid_folder, rotation)
+        for transfer in ("transfer_allowed", "transfer_not_allowed"):
+            transfer_folder = os.path.join(rotation_folder, transfer)
+            for extra in ("extra_rotation_allowed", "extra_rotation_not_allowed"):
+                extra_folder = os.path.join(transfer_folder, extra)
+                for player in tablebase.COMPRESSED_PLAYER_TURNS:
+                    player_folder = os.path.join(
+                        extra_folder, tablebase._player_name(player))
+                    if not os.path.isdir(player_folder):
+                        continue
+                    entry = (rotation, transfer == "transfer_allowed",
+                             extra == "extra_rotation_allowed")
+                    if entry not in found:
+                        found.append(entry)
+    return found
+
+
+def available_grid_sizes(base_dir=None):
     """Return the sorted grid sizes that are available in a tablebase.
 
     Used by graphical front-ends to tell the user up-front which board sizes
     can be answered instantly from the tablebase. An empty list means that no
-    tablebase has been generated yet.
+    tablebase has been generated yet, or that what is there predates the
+    endgame-press rule and has to be rebuilt before it can be used again.
     """
-    tablebase_type = tablebase.normalise_tablebase_type(tablebase_type)
-    base_dir = tablebase.default_base_dir(tablebase_type) if base_dir is None else base_dir
+    base_dir = tablebase.default_base_dir() if base_dir is None else base_dir
     grid_sizes = []
     try:
         entries = os.listdir(base_dir)
@@ -619,8 +678,11 @@ def available_grid_sizes(base_dir=None, tablebase_type="compressed"):
         size = entry.partition("x")[0]
         if "x" not in entry or not size.isdigit() or int(size) < 1:
             continue
-        if int(size) not in grid_sizes:
-            grid_sizes.append(int(size))
+        size = int(size)
+        if size in grid_sizes:
+            continue
+        if _stored_contexts(base_dir, size):
+            grid_sizes.append(size)
     grid_sizes.sort()
     return grid_sizes
 
@@ -630,10 +692,10 @@ def get_solution(
     player_turn,
     rotate_direction="clockwise",
     transfer_allowed=True,
+    extra_rotation_allowed=True,
     base_dir=None,
     grid_size=None,
     players_symbols=None,
-    tablebase_type="compressed",
 ):
     """Return a formatted solution or POSITION_NOT_FOUND.
 
@@ -648,10 +710,10 @@ def get_solution(
         player_turn,
         rotate_direction=rotate_direction,
         transfer_allowed=transfer_allowed,
+        extra_rotation_allowed=extra_rotation_allowed,
         base_dir=base_dir,
         grid_size=grid_size,
         players_symbols=players_symbols,
-        tablebase_type=tablebase_type,
     )
     if entry is None:
         return POSITION_NOT_FOUND
@@ -694,6 +756,22 @@ def main(argv=None):
         help="disable transfer moves",
     )
     parser.set_defaults(transfer_allowed=True)
+    extra_group = parser.add_mutually_exclusive_group()
+    extra_group.add_argument(
+        "--extra-rotation-allowed",
+        "--endgame-presses",
+        dest="extra_rotation_allowed",
+        action="store_true",
+        help=f"decide a full board without a line with {int(solve_game.EXTRA_TURNS)} "
+             "more Orbito presses (the official rule)",
+    )
+    extra_group.add_argument(
+        "--extra-rotation-not-allowed",
+        dest="extra_rotation_allowed",
+        action="store_false",
+        help="call a full board without a line a draw straight away",
+    )
+    parser.set_defaults(extra_rotation_allowed=True)
     parser.add_argument(
         "-n",
         "--grid-size",
@@ -702,19 +780,10 @@ def main(argv=None):
         help="grid size; inferred from the state when omitted",
     )
     parser.add_argument(
-        "--tablebase",
-        "--tablebase-type",
-        "--tablebase_type",
-        dest="tablebase_type",
-        choices=tablebase.TABLEBASE_TYPES,
-        default="compressed",
-        help="tablebase to query (default: compressed)",
-    )
-    parser.add_argument(
         "-b",
         "--base-dir",
         default=None,
-        help="tablebase directory (default: selected tablebase directory)",
+        help="tablebase directory (default: the compressed tablebase directory)",
     )
     args = parser.parse_args(argv)
     state = args.state_option if args.state_option is not None else args.state
@@ -727,9 +796,9 @@ def main(argv=None):
             player_turn=args.player_turn,
             rotate_direction=args.rotate_direction,
             transfer_allowed=args.transfer_allowed,
+            extra_rotation_allowed=args.extra_rotation_allowed,
             base_dir=args.base_dir,
             grid_size=args.grid_size,
-            tablebase_type=args.tablebase_type,
         )
     except ValueError as error:
         parser.error(str(error))

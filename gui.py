@@ -12,9 +12,9 @@ import orbital_logic_game_functions as olgf
 # Layout and colours
 # ---------------------
 
-BOARD_SIZE = 600
-MENU_WIDTH = 430
-STATUS_HEIGHT = 160
+BOARD_SIZE = 700
+MENU_WIDTH = 700
+STATUS_HEIGHT = 200
 WINDOW_WIDTH = BOARD_SIZE + MENU_WIDTH
 WINDOW_HEIGHT = BOARD_SIZE + STATUS_HEIGHT
 
@@ -1033,6 +1033,7 @@ def main():
         "pending": None,    # (result, arrival time, kind) waiting out the think time
         "blocked": False,   # the computer cannot answer, wait for the human
         "vs_computer": False,  # the computer plays the other side
+        "extra_turns": 0,   # endgame presses played after the board filled up
     }
 
     editor = {
@@ -1055,9 +1056,10 @@ def main():
     grid_size_box = InputBox(66, INPUT_HEIGHT, BODY_SIZE, text="4")
     time_limit_box = InputBox(78, INPUT_HEIGHT, BODY_SIZE, text="5.0", decimal=True, max_len=5)
     transfer_checkbox = Checkbox(CHECK_SIZE, BODY_SIZE, "Allow Transfer Moves", checked=True)
+    extra_checkbox = Checkbox(CHECK_SIZE, BODY_SIZE, "Allow Endgame Presses", checked=True)
     animation_checkbox = Checkbox(CHECK_SIZE, BODY_SIZE, "Animate Moves", checked=True)
     rotation_group = radio_group(BODY_SIZE,
-                                 ["Still", "Clockwise", "Counterclockwise"], default=1)
+                                 ["Still", "Clockwise", "Counterclockwise"], default=2)
     mode_group = radio_group(BODY_SIZE,
                              ["2 Players", "Vs Computer", "Position Editor"], default=1)
     mode_computer, mode_editor = mode_group[1], mode_group[2]
@@ -1135,11 +1137,41 @@ def main():
         resized[:rows, :cols] = board[:rows, :cols]
         return resized
 
+    def endgame_allowed():
+        """Whether a filled board without a line is followed by forced presses."""
+        return bool(extra_checkbox.checked)
+
+    def presses_left():
+        """How many of the official endgame presses are still to be played."""
+        return max(0, engine.EXTRA_TURNS - game["extra_turns"])
+
+    def endgame_active(board=None):
+        """Whether the board waits for an endgame press of the side to move."""
+        if not endgame_allowed():
+            return False
+        board = game["board"] if board is None else board
+        if olgf.evaluate_game_state(board) is not None:
+            return False
+        return olgf.board_is_full(board) and presses_left() > 0
+
+    def endgame_press():
+        """Play the forced press that the rules ask for on a filled board."""
+        move = olgf.rotation_only_move(game["player"], current_rotation())
+        game["hint"] = None
+        return play_move(move, game["player"])
+
     def evaluate_position(board):
         """Return (board, game_over, message) for a board, empty or finished."""
         result = olgf.evaluate_game_state(board)
-        if result is None and not np.any(board == 0):
-            result = 0
+        if result is None and olgf.board_is_full(board):
+            # a full board without a line waits for the presses, unless they are
+            # switched off or already spent
+            if not endgame_allowed():
+                result = 0
+            elif presses_left() <= 0:
+                return board, True, "It's a draw! No line in the endgame presses."
+            else:
+                return board, False, ""
         if result is None:
             return board, False, ""
         if result == 0:
@@ -1182,6 +1214,7 @@ def main():
     ])
     menu_panel.add_row(RADIO_ROW_HEIGHT, [(animation_checkbox, 0, None, None)])
     menu_panel.add_row(RADIO_ROW_HEIGHT, [(transfer_checkbox, 0, None, None)])
+    menu_panel.add_row(RADIO_ROW_HEIGHT, [(extra_checkbox, 0, None, None)])
     menu_panel.add_row(LABEL_ROW_HEIGHT, [(Label("Rotation:", body_font), 0, None, None)])
     for radio in rotation_group:
         menu_panel.add_row(RADIO_ROW_HEIGHT, [(radio, 0, None, RADIO_ROW_HEIGHT)])
@@ -1202,7 +1235,7 @@ def main():
     menu_panel.add_row(START_BUTTON_HEIGHT, [(start_button, 0, FILL, START_BUTTON_HEIGHT)])
 
     # ---------------- Position editor panel ----------------
-    editor_hint = TextPanel(0, text_panel_height(2, small_font, titled=False),
+    editor_hint = TextPanel(0, text_panel_height(10, small_font, titled=False),
                             small_font, scrollable=False, background=(240, 240, 244))
     editor_piece_group = radio_group(BODY_SIZE, PLAYER_LABELS, default=1)
     # a game starts with the white pieces, so white is the side a drawn
@@ -1238,6 +1271,7 @@ def main():
     for radio in rotation_group:
         editor_panel.add_row(RADIO_ROW_HEIGHT, [(radio, 0, None, RADIO_ROW_HEIGHT)])
     editor_panel.add_row(RADIO_ROW_HEIGHT, [(transfer_checkbox, 0, None, None)])
+    editor_panel.add_row(RADIO_ROW_HEIGHT, [(extra_checkbox, 0, None, None)])
     editor_panel.add_row(LABEL_ROW_HEIGHT, [(editor_engine_label, 0, FILL, None)])
     editor_panel.add_row(START_BUTTON_HEIGHT,
                          [(editor_ask_button, 0, FILL, START_BUTTON_HEIGHT)])
@@ -1298,6 +1332,8 @@ def main():
             player_turn=int(player),
             rotation=current_rotation(),
             transfer_allowed=bool(transfer_checkbox.checked),
+            extra_rotation_allowed=endgame_allowed(),
+            extra_turns=game["extra_turns"],
             time_limit=read_time_limit(),
             **config,
         )
@@ -1385,9 +1421,11 @@ def main():
         """Play a move for a player and update the game status and log."""
         previous = game["board"]
         board = olgf.play_turn(previous, move)
-        if np.array_equal(board, previous):
+        if np.array_equal(board, previous) and not olgf.is_rotation_only(move):
             game["message_line"] = "That move is not legal, try again."
             return False
+        if olgf.is_rotation_only(move):
+            game["extra_turns"] += 1
         animate_board(game_animator, previous, board, move, player, move.get("rotate"))
         game["board"] = board
         game["position_id"] = None
@@ -1401,7 +1439,10 @@ def main():
         return True
 
     def complete_move():
-        """Play the move that was assembled with the mouse."""
+        """Play the move that was assembled with the mouse, or an endgame press."""
+        if endgame_active():
+            endgame_press()
+            return
         if game["phase"] != "add_move" or game["move"]["add"] is None:
             return
         move = {"player": game["player"], "transfer": None,
@@ -1444,6 +1485,7 @@ def main():
         game["position_id"] = None
         game["hint"] = None
         game["blocked"] = False
+        game["extra_turns"] = 0
         play_log.clear()
         play_report.clear()
         reset_turn()
@@ -1593,6 +1635,7 @@ def main():
         game["position_id"] = None
         game["hint"] = None
         game["blocked"] = False
+        game["extra_turns"] = 0
         play_log.clear()
         play_report.clear()
         reset_turn()
@@ -1640,7 +1683,7 @@ def main():
             blocks.append(("", None))
             blocks.append(("Every move in this position:", None))
             for number, item in enumerate(moves, start=1):
-                mark = "▶ " if engine.move_to_text(item["move"]) == best else "  "
+                mark = "-> " if engine.move_to_text(item["move"]) == best else "  "
                 blocks.append((
                     f"{number}. {mark}{item['text']}, {item['traps']} losing replies",
                     RESULT_COLORS.get(item["result"]),
@@ -1689,6 +1732,9 @@ def main():
         if event.type != pygame.MOUSEBUTTONDOWN or event.button != 1:
             return
         if game["over"] or hover_cell is None or game_animator.is_moving():
+            return
+        if endgame_active():
+            endgame_press()
             return
         if vs_computer() and game["player"] != human_player():
             return
@@ -1758,7 +1804,18 @@ def main():
     # ---------------- Drawing ----------------
     def rules_text():
         return (f"rotation: {current_rotation()}, transfers: "
-                f"{'allowed' if transfer_checkbox.checked else 'not allowed'}")
+                f"{'allowed' if transfer_checkbox.checked else 'not allowed'}, "
+                f"endgame presses: "
+                f"{f'{engine.EXTRA_TURNS} allowed' if endgame_allowed() else 'not allowed'}")
+
+    def endgame_text():
+        """The readout of the endgame press counter, empty outside the endgame."""
+        if not endgame_allowed():
+            return ""
+        left = presses_left()
+        if left == engine.EXTRA_TURNS:
+            return ""
+        return f" | endgame press {engine.EXTRA_TURNS - left + 1} of {engine.EXTRA_TURNS}"
 
     def tablebase_text():
         if not tablebase_sizes:
@@ -1790,8 +1847,12 @@ def main():
         if game["over"]:
             play_status_label.set_text(game["message"])
         else:
-            play_status_label.set_text(
-                f"Turn: {PLAYER_NAMES[game['player']]}{player_role(game['player'])}")
+            turn = f"Turn: {PLAYER_NAMES[game['player']]}{player_role(game['player'])}"
+            if endgame_active():
+                turn += f" | endgame, {presses_left()} press"
+                turn += "es" if presses_left() != 1 else ""
+                turn += " left"
+            play_status_label.set_text(turn)
         if game["busy"]:
             play_message.set_text(
                 f"{PLAYER_NAMES[game['player']]} is thinking... "
@@ -1803,7 +1864,7 @@ def main():
         draw_status(
             f"Playing a {size}x{size} game"
             f"{' against the computer' if vs_computer() else ' with two players'}"
-            f"  |  {rules_text()}\n"
+            f"{endgame_text()}  |  {rules_text()}\n"
             f"{tablebase_text()}\n"
             f"{cell_text(hover_cell)}",
             game["position_id"]

@@ -4,6 +4,12 @@ import time
 import copy
 import itertools
 import orbital_logic_game_functions as olgf
+import solve_game
+
+
+# a full board without a line is finished by this many Orbito presses when the
+# rule is on; with the rule off such a board is a draw straight away
+EXTRA_TURNS = solve_game.EXTRA_TURNS
 
 
 def _sample_move_encoded(row, player, transfer_allowed, n, rng):
@@ -55,6 +61,7 @@ def _play_random_games_batch(
     transfer_allowed,
     batch_size=None,
     seed=None,
+    extra_rotation_allowed=True,
 ):
     """CPU batched rewrite of the per-game random play loop.
 
@@ -82,6 +89,29 @@ def _play_random_games_batch(
     rng = np.random.default_rng(seed)
     batch_size = batch_size if batch_size and batch_size > 0 else max(64, min(1024, games_played))
     games_done = 0
+    ar = np.arange(n)
+
+    def results_of(rows):
+        """The winner of every board in the batch: 1, 2, 0 for a shared line, -1."""
+        w = np.where(rows == 2, -1, rows)
+        row_sums = w.sum(axis=2)
+        col_sums = w.sum(axis=1)
+        d1 = w[:, ar, ar].sum(axis=1)
+        d2 = w[:, ar, n - 1 - ar].sum(axis=1)
+        p1 = (row_sums == n).any(axis=1) | (col_sums == n).any(axis=1) | (d1 == n) | (d2 == n)
+        p2 = (row_sums == -n).any(axis=1) | (col_sums == -n).any(axis=1) | (d1 == -n) | (d2 == -n)
+        return np.where(p1 & p2, 0, np.where(p1, 1, np.where(p2, 2, -1)))
+
+    def book(rows_results, mask):
+        """Count the outcomes of the masked games, keyed by who started them."""
+        for i in np.flatnonzero(mask):
+            key = "1_start" if start_players[i] == 1 else "2_start"
+            if rows_results[i] == 1:
+                counters[f"{key}_1_win"] += 1
+            elif rows_results[i] == 2:
+                counters[f"{key}_2_win"] += 1
+            else:
+                counters[f"{key}_draw"] += 1
 
     while games_done < games_played:
         m = min(batch_size, games_played - games_done)
@@ -115,36 +145,26 @@ def _play_random_games_batch(
                 rows = np.flatnonzero(m_add)
                 boards[rows, add_src[m_add]] = players[m_add]
             boards = boards[:, perm]
-            cube = boards.reshape(m, n, n)
-            w = np.where(cube == 2, -1, cube)
-            ar = np.arange(n)
-            row_sums = w.sum(axis=2)
-            col_sums = w.sum(axis=1)
-            d1 = w[:, ar, ar].sum(axis=1)
-            d2 = w[:, ar, n - 1 - ar].sum(axis=1)
-            p1 = (row_sums == n).any(axis=1) | (col_sums == n).any(axis=1) | (d1 == n) | (d2 == n)
-            p2 = (row_sums == -n).any(axis=1) | (col_sums == -n).any(axis=1) | (d1 == -n) | (d2 == -n)
-            results = np.where(p1 & p2, 0, np.where(p1, 1, np.where(p2, 2, -1)))
-            newly_finished = ((results == 1) | (results == 2)) & active
+            results = results_of(boards.reshape(m, n, n))
+            # a board with a line is finished, and a shared line is a draw
+            newly_finished = (results != -1) & active
             if newly_finished.any():
-                for i in np.flatnonzero(newly_finished):
-                    if start_players[i] == 1:
-                        if results[i] == 1:
-                            counters["1_start_1_win"] += 1
-                        elif results[i] == 2:
-                            counters["1_start_2_win"] += 1
-                    else:
-                        if results[i] == 1:
-                            counters["2_start_1_win"] += 1
-                        elif results[i] == 2:
-                            counters["2_start_2_win"] += 1
+                book(results, newly_finished)
                 active &= ~newly_finished
+        # the games still running hold a full board without a line: the official
+        # rule finishes them with forced presses, which add nothing and only turn
+        # the rings, so they are applied to the whole batch at once
+        for press in range(EXTRA_TURNS if extra_rotation_allowed else 0):
+            if not active.any():
+                break
+            boards = boards[:, perm]
+            results = results_of(boards.reshape(m, n, n))
+            pressed = (results != -1) & active
+            if pressed.any():
+                book(results, pressed)
+                active &= ~pressed
         if active.any():
-            for i in np.flatnonzero(active):
-                if start_players[i] == 1:
-                    counters["1_start_draw"] += 1
-                else:
-                    counters["2_start_draw"] += 1
+            book(np.zeros(m, dtype=np.int64), active)
         games_done += m
 
     return counters
@@ -170,7 +190,7 @@ def _print_probabilities(counters, games_played, start_time):
     print(f"\nTime taken: {time.time() - start_time:.2f} seconds")
 
 
-def check_game_play_probabilities(board_size = 3, games_played = 10000, rotate_direction = "1", transfer_allowed = True, players_symbols = {1: "x", 2: "o", 0: "_"}, verbose_print = False, batch_size = None, seed = None):
+def check_game_play_probabilities(board_size = 3, games_played = 10000, rotate_direction = "1", transfer_allowed = True, players_symbols = {1: "x", 2: "o", 0: "_"}, verbose_print = False, batch_size = None, seed = None, extra_rotation_allowed = True):
     start_time = time.time()
     olgf.print_game_statistics(board_size)
     counters = {"1_start_1_win": 0, "1_start_2_win": 0, "2_start_1_win": 0, "2_start_2_win": 0, "1_start_draw": 0, "2_start_draw": 0}
@@ -178,6 +198,7 @@ def check_game_play_probabilities(board_size = 3, games_played = 10000, rotate_d
         counters = _play_random_games_batch(
             board_size, games_played, rotate_direction, transfer_allowed,
             batch_size=batch_size, seed=seed,
+            extra_rotation_allowed=extra_rotation_allowed,
         )
         _print_probabilities(counters, games_played, start_time)
         return counters
@@ -195,27 +216,30 @@ def check_game_play_probabilities(board_size = 3, games_played = 10000, rotate_d
             player = 3 - player
             state = new_state
             result = olgf.evaluate_game_state(state)
-            if result == 1:
-                if start_player == 1:
-                    counters["1_start_1_win"] += 1
-                elif start_player == 2:
-                    counters["2_start_1_win"] += 1
-                if verbose_print: print(f"Player 1 wins\n")
+            if result in (1, 2):
+                if verbose_print: print(f"Player {result} wins\n")
                 break
-            if result == 2:
-                if start_player == 1:
-                    counters["1_start_2_win"] += 1
-                elif start_player == 2:
-                    counters["2_start_2_win"] += 1
-                if verbose_print: print(f"Player 2 wins\n")
-                break
-            if j == board_size ** 2 - 1:
-                if start_player == 1:
-                    counters["1_start_draw"] += 1
-                elif start_player == 2:
-                    counters["2_start_draw"] += 1
+        else:
+            # the board filled up without a line, so the official rule presses on
+            for _ in range(EXTRA_TURNS if extra_rotation_allowed else 0):
+                press = olgf.rotation_only_move(player, rotate_direction)
+                state = olgf.play_turn(state, press)
+                if verbose_print: print(press); olgf.print_game_state(state, players_symbols, [1, "  ", ""]); print(2*"\n")
+                player = 3 - player
+                result = olgf.evaluate_game_state(state)
+                if result in (1, 2):
+                    if verbose_print: print(f"Player {result} wins\n")
+                    break
+            else:
+                result = 0
                 if verbose_print: print("It's a draw\n")
-                break
+        prefix = "1_start" if start_player == 1 else "2_start"
+        if result == 1:
+            counters[f"{prefix}_1_win"] += 1
+        elif result == 2:
+            counters[f"{prefix}_2_win"] += 1
+        else:
+            counters[f"{prefix}_draw"] += 1
     _print_probabilities(counters, games_played, start_time)
     return counters
 

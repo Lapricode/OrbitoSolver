@@ -43,12 +43,21 @@ cycle**. This single fact is what the whole solver rests on:
 - values can be computed in one bottom-up pass instead of needing fixpoint iteration;
 - mate scores need no depth bookkeeping, because the ply index *is* the depth.
 
+There is exactly one exception, and it sits at the very bottom of the sweep: the **endgame
+presses**. A full board without a line has no move to generate, and the official rule finishes
+it with up to `EXTRA_TURNS = 5` forced Orbito presses that add nothing. Presses do not occupy
+cells, so they break the "ply = occupancy" identity and cannot be layers of the sweep. They are
+instead *replayed*: the bottom layer asks "what does at most five ring rotations of this board
+leave?", and the answer is a value plus a distance. Since the presses do not change the occupancy,
+the number already spent is **not part of the board** — it is carried beside it as
+`extra_turns`, which is why the tables only store the position before the first press.
+
 `create_game_tablebase.py` already walks those layers from the full board downwards, but it
 solves every position from scratch, so each board re-searches its entire subtree. The same
 waste happens inside a single search: a transposition table collapses repeated positions, but
 every distinct position is still expanded once per search. `retrograde_tablebase.py` removes
 that waste — one sweep per rule context, where a rule context is a
-`(grid size, rotation direction, transfer rule)` triple.
+`(grid size, rotation direction, transfer rule, endgame rule)` quadruple.
 
 ---
 
@@ -57,7 +66,7 @@ that waste — one sweep per rule context, where a rule context is a
 ### Phase 1 — enumerate the reachable layers
 
 ```python
-layers = enumerate_reachable(grid_size, rotation, transfer_allowed)
+layers = enumerate_reachable(grid_size, rotation, transfer_allowed, extra_rotation_allowed)
 # layers[ply] is a sorted np.int64 array of base-3 board codes; layers[0] == [0]
 ```
 
@@ -143,6 +152,14 @@ just a value. Among winning continuations we keep the **fastest** mate, and amon
 the **slowest** delay. The table therefore does not merely say *whether* a position is won, it
 says *how long the game will last*, and stores the optimal line's length as a side effect.
 
+The last row of that table is where the endgame presses go. A full board without a line has no
+children, so the sweep cannot give it a value by folding; `_endgame_value` asks
+`endgame_outcome` instead, which replays at most `EXTRA_TURNS` presses through the ring
+permutation and returns `(winner, presses_used)`. That is folded in like any other child, with
+the press count as the distance — so a position that is won on the third press is stored as
+`WIN_SCORE - 3`, and a position that survives all five is stored as a draw with distance `5`.
+With the rule switched off the same board is simply the `0` of the last row.
+
 Because the ply index is the occupancy, `WIN_SCORE - plies_to_terminal` is a property of the
 position alone: no depth fields, no relative-to-root normalisation, nothing that could go stale
 when a position is reached from a different root.
@@ -165,11 +182,13 @@ np.savez_compressed(file, score=score, dtx=dtx, metadata=np.array(json.dumps(met
 ```
 
 ```text
-<base_dir>/<n>x<n>/<rotation>/<transfer_allowed|transfer_not_allowed>/retrograde.npz
+<base_dir>/<n>x<n>/<rotation>/<transfer_allowed|transfer_not_allowed>/<extra_rotation_allowed|extra_rotation_not_allowed>/retrograde.npz
 ```
 
-`metadata` carries `format_version`, `grid_size`, `rotation`, `transfer_allowed`,
-`starting_player`, the score convention, `positions`, `layer_sizes` and `table_entries`.
+`metadata` carries `format_version` (currently `2`), `grid_size`, `rotation`, `transfer_allowed`,
+`extra_rotation_allowed`, `starting_player`, the score convention, `positions`, `layer_sizes` and
+`table_entries`. A table whose version does not match is refused rather than misread, which is
+why tables built before the presses existed have to be rebuilt.
 
 ### Half the table: the colour-swap isomorphism
 
@@ -210,8 +229,9 @@ A reflection of the board maps the clockwise game onto the counterclockwise one:
 
 So the two games are isomorphic, and a counterclockwise position is answered from the clockwise
 table after reflecting the board, with the moves reflected back on the way out. Only the
-`still` and `clockwise` tables are therefore built — 4 contexts per grid size instead of 6,
-which is what took the committed tablebase from 62 MB down to 38 MB.
+`still` and `clockwise` tables are therefore built — 8 contexts per grid size (2 rotations x 2
+transfer rules x 2 endgame rules) instead of 12, which is what took the committed tablebase from
+62 MB down to 38 MB before the endgame rule doubled the file count.
 
 `_REFLECTION = (True, 0)` is a vertical-axis mirror (its own inverse, which is what lets the
 same mapping send the answer back), reused from `create_game_tablebase`'s symmetry machinery so
@@ -238,6 +258,16 @@ moves, states = principal_variation(table, state, player_turn, rotation)
 
 So the optimal line comes out of two bytes per position.
 
+A line that runs into the endgame is finished by the presses rather than stopping short. The walk
+appends them in either of the two ways it can arrive at a full board without a line: when the
+position has no children left, and when the last ply the walk is allowed to make filled the board
+(its loop is bounded by the cell count, so a game that fills the board on its final ply runs out
+of iterations with the presses still to be played). `endgame_outcome` is then replayed and each
+press is appended as a `rotation_only` move, up to the press that makes a line or the fifth one.
+That is also why the value tables alone answer positions *inside* the presses: the board is the
+same board, so a query with `extra_turns = k` is looked up at `k = 0` and the first `k` presses
+are skipped.
+
 `build_record` then adapts a value table into the *same* record layout the JSON tablebase uses
 (adding a `"source": "retrograde.npz"` field), so `get_solution` has a single format to deal
 with and the JSON files remain a genuine fallback rather than a parallel universe.
@@ -262,6 +292,10 @@ runs, per context:
    `counterclockwise` views must agree on both whether a position is stored and what it scores,
    and the reflected line must stay legal when replayed from the position that was asked about.
    This is the check that justifies storing only one of the two.
+7. **Check the endgame presses** (`_mid_endgame_problems`): a full board without a line is
+   re-solved by the search engine for every `extra_turns` from `0` to `EXTRA_TURNS` and compared
+   with the stored value, so the press replay, the distance and the terminal draw are all
+   cross-checked rather than trusted.
 
 Any mismatch prints `MISMATCH: ...` to stderr and the process exits with code 1. This is what
 makes the tablebases trustworthy rather than merely fast.
@@ -270,10 +304,11 @@ makes the tablebases trustworthy rather than merely fast.
 
 ## Tier 2 — Symmetry-reduced JSON tablebase
 
-`create_game_tablebase.py` builds per-position JSON records:
+`create_game_tablebase.py` builds per-position JSON records, where `id` is the position itself
+written as one base-3 digit per cell, row by row:
 
 ```json
-{ "id": "...", "position": [[0,0],[0,1]],
+{ "id": "00012112", "position": [[0,0,0,1],[2,1,1,2],[2,1,0,1],[1,2,2,1]],
   "solution": { "score": 999, "game_result": "player1_wins",
                 "best_move": {...}, "moves_sequence": [...], "states_sequence": [...] } }
 ```
@@ -281,7 +316,7 @@ makes the tablebases trustworthy rather than merely fast.
 laid out as
 
 ```text
-<base_dir>/<n>x<n>/<rotation>/<transfer_allowed|transfer_not_allowed>/<player1|player2>/completion_<pieces>.json
+<base_dir>/<n>x<n>/<rotation>/<transfer_allowed|transfer_not_allowed>/<extra_rotation_allowed|extra_rotation_not_allowed>/<player1>/completion_<pieces>.json
 ```
 
 A naive build stores all `3^(n^2)` boards per context. The **compressed** variant stores only
@@ -311,6 +346,16 @@ On 3x3 this gives **15,714** compressed records versus **236,196** for the full 
 about 15x smaller, on top of dropping the `player2` and `counterclockwise` folders. A useful
 side benefit of the JSON variant is that it also covers positions that **no game from the empty
 board can reach**, which the retrograde tablebase deliberately prunes away.
+
+The endgame rule is the one place where a rotation cannot be used to identify two boards, so
+`canonicalize_state` has to special-case it. Rotating orbits collapse a board onto its
+representative and map the move back across the rotation — that is sound for every position with
+an empty cell, but **not** for a full board without a line, where the value is the outcome of
+*repeatedly* rotating that exact board. Two orientations of the same full board can therefore
+have different press outcomes, and `_turning_changes_the_result` disables the rotational part of
+the reduction for `clockwise` (leaving reflection and the colour swap, which are still sound) so
+every orientation is stored. With `still` presses, or with the rule switched off, nothing can
+change, so the reduction stays on.
 
 ---
 
@@ -342,6 +387,12 @@ honest: a fallback search that hit its depth limit gets a warning that the resul
 guaranteed, and a `depth == 0` answer is reported as "the best ordered move" with no score
 rather than being dressed up as an evaluation.
 
+A position that is already inside the presses is answered before any tablebase is consulted:
+the value tables only know the position before the first press, so `choose_move` replays the
+presses with `endgame_score` and reports the answer under its own `SOURCE_ENDGAME` with
+`presses_remaining`. Once the last press is spent there is no move left to offer, and the engine
+says the game is a draw rather than handing out a sixth press.
+
 ---
 
 ## Parallelism
@@ -368,17 +419,19 @@ Every multiprocessing path degrades gracefully to a serial one — `_pool_contex
 
 ## Measured results
 
-Retrograde value tables, one file per `(grid size, rotation, transfer rule)`:
+Retrograde value tables, one file per `(grid size, rotation, transfer rule, endgame rule)`:
 
-| Grid | Table entries | Positions stored | Size |
+| Grid | Table entries | Positions stored per context | Size per context |
 | --- | --- | --- | --- |
-| 1x1 | 3 | 2 | <1 kB |
-| 2x2 | 81 | 29 | <1 kB |
-| 3x3 | 19,683 | 5,478 – 6,034 | <1 kB |
-| 4x4 | 43,046,721 | 9,721,176 – 10,161,173 | 5.6 – 12.5 MB |
+| 1x1 | 3 | 2 | 0.8 KiB |
+| 2x2 | 81 | 29 | 0.9 KiB |
+| 3x3 | 19,683 | 5,478 – 6,034 | 7.3 – 8.3 KiB |
+| 4x4 | 43,046,721 | 9,721,176 – 10,161,173 | 5.3 – 13.4 MiB |
 
-16 files, ~38 MB total, against roughly **4 GB** for the equivalent JSON records — the ~60x gap
-is the whole point of the retrograde format, and it is why 4x4 is playable at all here.
+Eight contexts per grid size, so 8 files per grid became 32 — 77.4 MiB in total, all of it
+generated by the current code and checked in, so the interface reports the grid sizes it can play
+on without a build step. Against roughly **4 GB** for the equivalent JSON records the ~60x gap of
+the retrograde format is the whole point, and it is why 4x4 is playable at all here.
 
 For comparison, the JSON tablebases hold 236,196 records for 3x3 in full mode and 15,714 in
 compressed mode. `print_game_statistics(4)` reports 15,134,931 distinct 4x4 boards reducing to
@@ -399,7 +452,17 @@ the retrograde table the same query is a single array index.
   the encoded move indices, so random sampling stays uniform over the same move set the search
   enumerates.
 - **Rotation permutations are built from concentric rings** (`_build_rings`), which is why the
-  centre cell of an odd-sized board maps to itself and needs no special case.
+  centre cell of an odd-sized board maps to itself and needs no special case. It also means a
+  press is *not* a rigid quarter turn of the board: each ring moves one step, so a line is not
+  generally carried onto a line, and an endgame press can be the move that completes one. Two
+  consequences follow, and both are handled explicitly rather than by luck: a ring rotation does
+  not preserve the winning lines, so the compressed tablebase may not identify a full board
+  across rotations; and `still` presses return an *equal* board, so `play_turn`'s "returns the
+  input unchanged on an illegal move" signal is ambiguous and callers must test
+  `olg.is_rotation_only` instead of comparing boards.
+- **The press counter is not in the board.** `extra_turns` travels beside the position through
+  `solve_game`, `computer_engine` and the GUI, while the tables only store `extra_turns = 0`.
+  Anything that answers a position has to know which of the two it is looking at.
 - **No GPU code, no Zobrist hashing and no bitboards** are in the current tree. Position
   identity is either the base-3 integer code (retrograde) or the
   `<grid>_<digits>_<context>` string ID (JSON), and the search transposition table is keyed by a
@@ -410,4 +473,6 @@ the retrograde table the same query is a single array index.
   a slow scalar reference loop, which is useful for confirming the batched vectorised
   implementation agrees with the straightforward one.
 - `play_turn` returns the *unchanged* input state on an illegal move, after printing a message.
-  The GUI relies on this to detect a rejected move.
+  The GUI relies on this to detect a rejected move — with the one exception of a `still` endgame
+  press, which is legal and also returns an equal board, so it is checked through
+  `olg.is_rotation_only`.

@@ -36,13 +36,11 @@ import solve_game
 MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
 RETROGRADE_TABLEBASE_DIR = os.path.join(MODULE_DIR, "retrograde_game_tablebase")
 COMPRESSED_TABLEBASE_DIR = os.path.join(MODULE_DIR, "compressed_game_tablebase")
-FULL_TABLEBASE_DIR = os.path.join(MODULE_DIR, "game_tablebase")
 
 # Most preferred first: the retrograde tables are exact for every reachable
 # position and answer with one array index, the JSON tablebase is the fallback.
 TABLEBASE_DIRS = (RETROGRADE_TABLEBASE_DIR, COMPRESSED_TABLEBASE_DIR)
 
-TABLEBASE_TYPE = "compressed"
 USE_TABLEBASE = True
 FALLBACK_RANDOM = "random"
 FALLBACK_SEARCH = "search"
@@ -52,6 +50,7 @@ FALLBACKS = (FALLBACK_RANDOM, FALLBACK_SEARCH, FALLBACK_NONE)
 SOURCE_TABLEBASE = "tablebase"
 SOURCE_RANDOM = "random"
 SOURCE_SEARCH = "search"
+SOURCE_ENDGAME = "endgame"
 SOURCE_NONE = "none"
 
 PLAYER_SYMBOLS = {0: "_", 1: "White", 2: "Black"}
@@ -59,11 +58,13 @@ DEFAULT_TIME_LIMIT = 3.0
 MAX_TIME_LIMIT = 600.0
 MAX_SEARCH_DEPTH = 100
 
+# how many presses the official rule gives once the board is full without a line
+EXTRA_TURNS = solve_game.EXTRA_TURNS
 
-def default_tablebase_dir(tablebase_type=TABLEBASE_TYPE):
-    """Absolute path of a JSON tablebase shipped next to this module."""
-    return (COMPRESSED_TABLEBASE_DIR if tablebase_type == TABLEBASE_TYPE
-            else FULL_TABLEBASE_DIR)
+
+def default_tablebase_dir():
+    """Absolute path of the JSON tablebase shipped next to this module."""
+    return COMPRESSED_TABLEBASE_DIR
 
 
 def tablebase_dirs(base_dir=None):
@@ -77,13 +78,13 @@ def tablebase_dirs(base_dir=None):
     return TABLEBASE_DIRS
 
 
-def available_grid_sizes(tablebase_type=TABLEBASE_TYPE, base_dir=None):
+def available_grid_sizes(base_dir=None):
     """Grid sizes covered by any tablebase, as sorted integers."""
     if base_dir is not None:
-        return get_solution.available_grid_sizes(base_dir, tablebase_type)
+        return get_solution.available_grid_sizes(base_dir)
     sizes = set()
     for directory in tablebase_dirs():
-        sizes.update(get_solution.available_grid_sizes(directory, tablebase_type))
+        sizes.update(get_solution.available_grid_sizes(directory))
     return sorted(sizes)
 
 
@@ -113,6 +114,8 @@ def move_to_text(move):
     """Human readable description of a move dictionary."""
     if move is None:
         return "no move"
+    if olgf.is_rotation_only(move):
+        return f"press Orbito ({move.get('rotate', 'still')})"
     parts = []
     transfer = move.get("transfer")
     if transfer is not None:
@@ -149,7 +152,8 @@ def moves_to_result(score):
     return WIN_SCORE - abs(score)
 
 
-def position_score(state, player_turn, rotation, transfer_allowed, base_dir=None):
+def position_score(state, player_turn, rotation, transfer_allowed, base_dir=None,
+                   extra_rotation_allowed=True):
     """Perfect ``(score, plies)`` of a stored position, or None when missing.
 
     Every tablebase directory is asked in the order :func:`tablebase_entry` uses.
@@ -161,7 +165,7 @@ def position_score(state, player_turn, rotation, transfer_allowed, base_dir=None
     """
     for directory in tablebase_dirs(base_dir):
         entry = retrograde_tablebase.stored_score(
-            directory, state, player_turn, rotation, transfer_allowed)
+            directory, state, player_turn, rotation, transfer_allowed, extra_rotation_allowed)
         if entry is not None:
             return entry
         score = get_solution.lookup_score(
@@ -169,11 +173,35 @@ def position_score(state, player_turn, rotation, transfer_allowed, base_dir=None
             player_turn=player_turn,
             rotate_direction=rotation,
             transfer_allowed=transfer_allowed,
+            extra_rotation_allowed=extra_rotation_allowed,
             base_dir=directory,
         )
         if score is not None:
             return score, None
     return None
+
+
+def endgame_score(state, player_turn, rotation, transfer_allowed, extra_rotation_allowed,
+                  extra_turns=0):
+    """Perfect ``(score, plies)`` of a position that only has the presses left.
+
+    A full board without a line has no move to look up, and the presses are
+    forced, so the value comes from the search engine instead. ``plies`` counts
+    the presses that are still to come, which is what the value tables store for
+    such a position as well.
+    """
+    if not extra_rotation_allowed:
+        return None
+    grid_size = np.asarray(state).shape[0]
+    perm = solve_game._engine_params(grid_size, rotation, transfer_allowed, True)[6]
+    lines_first_rest = solve_game._build_grid(grid_size)[1]
+    cells = tuple(int(cell) for cell in np.asarray(state, dtype=int).ravel())
+    outcome = solve_game.endgame_outcome(
+        cells, perm, lines_first_rest, extra_rotation_allowed, extra_turns)
+    if outcome is None:
+        return None
+    winner, turns, _boards = outcome
+    return solve_game.endgame_score(winner, turns, player_turn), turns
 
 
 def evaluate_moves(
@@ -183,6 +211,7 @@ def evaluate_moves(
     transfer_allowed=True,
     base_dir=None,
     count_traps=True,
+    extra_rotation_allowed=True,
 ):
     """Evaluate every legal move of a position with the stored perfect scores.
 
@@ -194,6 +223,9 @@ def evaluate_moves(
     move itself used. The moves come back ordered as the player asked for them:
     wins first, then draws, then losses, and inside each group the move that ends
     the game soonest (wins) or lasts longest (losses) comes first.
+
+    A position in the endgame has no move but the forced Orbito press, so the
+    list holds that single move, valued by replaying the presses that follow it.
 
     Every entry is a dictionary:
 
@@ -222,7 +254,40 @@ def evaluate_moves(
     opponent = 3 - player_turn
     evaluated = []
     complete = True
-    for move in olgf.get_possible_moves(state, rotation, transfer_allowed, player_turn):
+    possible = olgf.get_possible_moves(state, rotation, transfer_allowed, player_turn)
+    if not possible and extra_rotation_allowed:
+        # nothing can be placed or transferred: the game is down to the presses
+        press = olgf.rotation_only_move(player_turn, rotation)
+        following = olgf.play_turn(state, press)
+        finished = olgf.evaluate_game_state(following)
+        if finished is not None:
+            # the first press already shows a line, which settles the game at once
+            score = (WIN_SCORE - 1) if finished == player_turn else -(WIN_SCORE - 1)
+            plies = 1
+        else:
+            entry = endgame_score(following, opponent, rotation, transfer_allowed, True, 1)
+            if entry is None:
+                return [], True
+            child_score, child_plies = entry
+            plies = child_plies + 1
+            if child_score == 0:
+                score = 0
+            else:
+                # the child value is the opponent's: a win of theirs is this
+                # player's loss, and both are measured over the presses left
+                distance = WIN_SCORE - plies
+                score = distance if child_score < 0 else -distance
+        evaluated.append({
+            "move": press,
+            "state": following,
+            "score": score,
+            "result": result_of_score(score),
+            "moves_to_result": (plies if score != 0 else None),
+            "traps": 0,
+            "text": move_result_text(press, score, player_turn, plies),
+        })
+        return evaluated, True
+    for move in possible:
         following = olgf.play_turn(state, move)
         finished = olgf.evaluate_game_state(following)
         if finished == 0:
@@ -235,7 +300,8 @@ def evaluate_moves(
             score = (WIN_SCORE - 1) if finished == player_turn else -(WIN_SCORE - 1)
             plies = 1
         else:
-            entry = position_score(following, opponent, rotation, transfer_allowed, base_dir)
+            entry = position_score(
+                following, opponent, rotation, transfer_allowed, base_dir, extra_rotation_allowed)
             if entry is None:
                 complete = False
                 continue
@@ -264,7 +330,8 @@ def evaluate_moves(
             "result": result_of_score(score),
             "moves_to_result": (plies if score != 0 else None),
             "traps": (count_losing_replies(following, opponent, rotation,
-                                           transfer_allowed, base_dir)
+                                           transfer_allowed, base_dir,
+                                           extra_rotation_allowed)
                       if count_traps else 0),
             "text": move_result_text(move, score, player_turn, plies),
         })
@@ -273,7 +340,8 @@ def evaluate_moves(
     return evaluated, complete
 
 
-def count_losing_replies(state, player_turn, rotation, transfer_allowed, base_dir):
+def count_losing_replies(state, player_turn, rotation, transfer_allowed, base_dir,
+                         extra_rotation_allowed=True):
     """How many of the moves of ``player_turn`` lose the game for them.
 
     A position that wins for the player to move usually offers them more than
@@ -282,7 +350,8 @@ def count_losing_replies(state, player_turn, rotation, transfer_allowed, base_di
     the same score into a choice.
     """
     moves, _complete = evaluate_moves(
-        state, player_turn, rotation, transfer_allowed, base_dir, count_traps=False)
+        state, player_turn, rotation, transfer_allowed, base_dir, count_traps=False,
+        extra_rotation_allowed=extra_rotation_allowed)
     return sum(1 for item in moves if item["result"] == RESULT_LOSS)
 
 
@@ -321,7 +390,8 @@ def best_evaluated_move(evaluated):
     return max(evaluated, key=lambda item: (item["score"], item["traps"]))["move"]
 
 
-def tablebase_entry(state, player_turn, rotation, transfer_allowed, base_dir=None):
+def tablebase_entry(state, player_turn, rotation, transfer_allowed, base_dir=None,
+                    extra_rotation_allowed=True):
     """Return the tablebase entry of a position, or None when absent.
 
     The retrograde value tables are consulted first and the compressed JSON
@@ -330,7 +400,8 @@ def tablebase_entry(state, player_turn, rotation, transfer_allowed, base_dir=Non
     position is answered from the clockwise table by a reflection of the board,
     which is why a build only needs the ``still`` and ``clockwise`` contexts.
     Positions whose game already ended have no legal move to suggest, so they
-    report None as well.
+    report None as well. A position in the endgame is answered from the forced
+    press, which the tables store as the value of that very position.
     """
     if olgf.evaluate_game_state(state) is not None:
         return None
@@ -341,8 +412,8 @@ def tablebase_entry(state, player_turn, rotation, transfer_allowed, base_dir=Non
                 player_turn=player_turn,
                 rotate_direction=rotation,
                 transfer_allowed=bool(transfer_allowed),
+                extra_rotation_allowed=extra_rotation_allowed,
                 base_dir=directory,
-                tablebase_type=TABLEBASE_TYPE,
             )
         except ValueError:
             return None
@@ -351,15 +422,17 @@ def tablebase_entry(state, player_turn, rotation, transfer_allowed, base_dir=Non
     return None
 
 
-def position_id(state, player_turn, rotation="clockwise", transfer_allowed=True):
-    """The tablebase ID of a position: its board, its rules and its side to move.
+def position_id(state, player_turn, rotation="clockwise", transfer_allowed=True,
+                extra_rotation_allowed=True):
+    """The ID of a position: its state alone, as base-3 digits.
 
-    This is the very string the tablebase files are keyed by, so a position can
-    be read from a report and looked up again in the JSON or the value tables. It
-    does not depend on the position being stored anywhere.
+    The cells are written row by row, so a 4x4 position reads as sixteen digits
+    such as ``0000121102102211``. The rule context and the side to move are not
+    part of it, which is why the arguments are accepted but not used: they say
+    how the position would be played, not which position it is. The result does
+    not depend on the position being stored anywhere.
     """
-    return create_game_tablebase.get_position_id(
-        state, rotation, transfer_allowed, player_turn)
+    return create_game_tablebase.position_state_id(state)
 
 
 def _result(source, move=None, score=None, message="", **extra):
@@ -385,6 +458,8 @@ def choose_move(
     max_depth=MAX_SEARCH_DEPTH,
     base_dir=None,
     seed=None,
+    extra_rotation_allowed=True,
+    extra_turns=0,
 ):
     """Return the computer move for ``state`` together with a report.
 
@@ -405,6 +480,11 @@ def choose_move(
     :func:`evaluate_moves`). ``move`` is then the best of them, ties broken by
     the number of losing replies left to the opponent.
 
+    ``extra_turns`` counts the endgame presses that have already been played.
+    They are not part of the board, so the value tables only know the presses
+    that start at one; a position that is already into them is answered by
+    replaying the rest.
+
     Every answer carries ``position_id``, the tablebase ID of the position (see
     :func:`position_id`), whether or not a tablebase knows it.
     """
@@ -418,7 +498,7 @@ def choose_move(
     start = time.monotonic()
     # every answer names the position it is about, stored or not, so a report
     # can always be traced back to a tablebase entry
-    identifier = position_id(state, player_turn, rotation, transfer_allowed)
+    identifier = position_id(state, player_turn, rotation, transfer_allowed, extra_rotation_allowed)
 
     if olgf.evaluate_game_state(state) is not None:
         return _result(
@@ -429,11 +509,33 @@ def choose_move(
             position_id=identifier,
         )
 
-    if use_tablebase:
-        entry = tablebase_entry(state, player_turn, rotation, transfer_allowed, base_dir)
+    if use_tablebase and extra_turns <= 0:
+        entry = tablebase_entry(
+            state, player_turn, rotation, transfer_allowed, base_dir, extra_rotation_allowed)
+        if entry is not None and entry["best_move"] is None:
+            # the position is stored but has no move left to make: a full board
+            # without a line, which is the draw the endgame presses used to be
+            return _result(
+                SOURCE_TABLEBASE,
+                move=None,
+                score=entry["score"],
+                message=(
+                    f"Tablebase (perfect play): the board is full and nobody has a "
+                    f"line, so it is a {game_result_message(entry['score'], player_turn)}"
+                ),
+                player_turn=player_turn,
+                elapsed=time.monotonic() - start,
+                text=entry["text"],
+                moves_sequence=entry["moves_sequence"],
+                states_sequence=[np.asarray(item, dtype=int) for item in entry["states_sequence"]],
+                position_id=entry["id"],
+                moves=[],
+                moves_complete=True,
+            )
         if entry is not None and entry["best_move"] is not None:
             evaluated, complete = evaluate_moves(
-                state, player_turn, rotation, transfer_allowed, base_dir)
+                state, player_turn, rotation, transfer_allowed, base_dir,
+                extra_rotation_allowed=extra_rotation_allowed)
             # the tablebase decides the result, the traps only pick between the
             # moves that reach it
             best = best_evaluated_move(evaluated) or entry["best_move"]
@@ -460,6 +562,44 @@ def choose_move(
                 moves_complete=complete,
             )
 
+    if extra_turns > 0 and extra_rotation_allowed:
+        # part way through the presses: the board is settled, the presses are not
+        entry = endgame_score(
+            state, player_turn, rotation, transfer_allowed, extra_rotation_allowed, extra_turns)
+        if entry is not None:
+            value, presses_left = entry
+            if presses_left <= 0:
+                # every press is spent and nobody ever held a line: the game is
+                # over, there is no further press to offer
+                return _result(
+                    SOURCE_ENDGAME,
+                    move=None,
+                    score=value,
+                    message=(
+                        f"All {int(solve_game.EXTRA_TURNS)} endgame presses are spent "
+                        f"without a line: {game_result_message(value, player_turn)}"
+                    ),
+                    player_turn=player_turn,
+                    elapsed=time.monotonic() - start,
+                    position_id=identifier,
+                    presses_remaining=0,
+                )
+            press = olgf.rotation_only_move(player_turn, rotation)
+            message = (
+                f"Endgame press {extra_turns + 1} of {int(solve_game.EXTRA_TURNS)} "
+                f"({presses_left} to go): {game_result_message(value, player_turn)}"
+            )
+            return _result(
+                SOURCE_ENDGAME,
+                move=press,
+                score=value,
+                message=message,
+                player_turn=player_turn,
+                elapsed=time.monotonic() - start,
+                position_id=identifier,
+                presses_remaining=presses_left,
+            )
+
     if fallback == FALLBACK_NONE:
         return _result(
             SOURCE_NONE,
@@ -473,6 +613,7 @@ def choose_move(
         rng = None if seed is None else random.Random(seed)
         move, _value = solve_game.find_random_move(
             state, rotation, transfer_allowed, player_turn, rng,
+            extra_rotation_allowed=extra_rotation_allowed, extra_turns=extra_turns,
         )
         if move is None:
             return _result(
@@ -495,6 +636,7 @@ def choose_move(
     move, score, info = solve_game.find_best_move_within_time(
         state, rotation, transfer_allowed, player_turn, time_limit=limit,
         max_depth=max_depth,
+        extra_rotation_allowed=extra_rotation_allowed, extra_turns=extra_turns,
     )
     if move is None:
         return _result(
@@ -556,6 +698,7 @@ def worker(request_queue, result_queue):
                     int(request.get("player_turn", 1)),
                     request.get("rotation", "clockwise"),
                     request.get("transfer_allowed", True),
+                    request.get("extra_rotation_allowed", True),
                 )
             except Exception:
                 identifier = None

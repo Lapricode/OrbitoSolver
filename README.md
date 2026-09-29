@@ -19,7 +19,17 @@ Each cell is empty, White (`1`) or Black (`2`). A turn has up to three phases:
 3. **Rotate** — rotate the whole board `still`, `clockwise` or `counterclockwise`.
 
 First to complete a full row, column or diagonal with their own pieces wins. A board where both
-players hold a complete line, or a full board with no line, is a **draw**.
+players hold a complete line is a **draw**.
+
+If the board fills up without a line, the **endgame presses** decide it (this rule can be
+switched off, in which case a full board without a line is a draw straight away). From then on
+there are no transfers and no adds: the side to move presses the button, which turns every ring of
+the board one step, up to **five** presses. The first press that leaves a complete line on the
+board wins; if all five presses are spent and nobody ever holds a line, the game is a draw.
+
+Because a press turns each ring by one step, the whole board is not turned rigidly: a ring
+rotation does **not** carry every line onto a line, so a press can create the winning line out of
+a position that held none.
 
 The rotation is what makes the game interesting: the board you are looking at is never the
 board you are reasoning about.
@@ -27,15 +37,20 @@ board you are reasoning about.
 ## Features
 
 - **Pygame GUI** — two-player, vs-computer, and a position editor for arbitrary boards.
-- **Grid sizes 1x1 to 10x10**, with configurable rotation and transfer rules per game.
+- **Grid sizes 1x1 to 10x10**, with configurable rotation, transfer and endgame-press rules per
+  game.
 - **Animated moves** — the transferred piece flies to its target, the added piece fades in, then
   everything slides one ring step during the rotation.
 - Move builder, undo, restart, move log, winning-line highlighting, hints, resizable window.
+- **Endgame presses** — a full board without a line is finished by up to five forced presses,
+  shown in the status bar as `endgame press 2 of 5`; clicking the board or "Complete Move" plays
+  one, and the computer plays them on its own.
 - **Computer opponent** with four policies: tablebase-else-random, tablebase-else-search
   (default), random only, search only.
 - **Background engine process** — searches never freeze the UI, and replies are held back until
   a minimum "thinking time" so the computer doesn't feel instantaneous.
-- **Retrograde tablebase** — complete for 1x1 to 4x4, ~38 MB.
+- **Retrograde tablebase** — built and checked in for 1x1 to 4x4, 77 MiB for both settings of
+  the endgame rule.
 - **Cross-verification** — stored values are re-checked against the independent search engine.
 - **Monte-Carlo statistics** — vectorised random-play win/draw probabilities.
 
@@ -61,18 +76,54 @@ orbvenv/bin/python gui.py
 python gui.py                       # graphical interface
 
 # Look up a position ("0012" is a 2x2 board)
-python get_solution.py 0012 -p 1 -r clockwise --transfer-allowed
+python get_solution.py 0012 -p 1 -r clockwise --transfer-allowed --endgame-presses
 
-# Build a tablebase
+# Build a tablebase (one grid size per run, both keep the presses on and off)
 python retrograde_tablebase.py -n 4 --workers 8     # value tables (fast, recommended)
-python create_game_tablebase.py -n 3 --tablebase compressed
+python create_game_tablebase.py -n 3                # symmetry-reduced JSON records
 
 # Build, then cross-check against the search engine
 python retrograde_tablebase.py -n 4 --verify 4
+python retrograde_tablebase.py -n 4 --verify 8 --plies 12-16   # 4x4: the late layers only
 
 # Full search from scratch, and random-play statistics
 python solve_game.py
 python test_game.py
+```
+
+Re-searching a 4x4 from the empty board takes hours, so the cross-check of the big grid is worth
+running on its late layers (`--plies`), where every sample is still proved against the independent
+search engine in seconds.
+
+Every rule context is a separate table directory, and every lookup asks for one of them:
+
+```
+retrograde_game_tablebase/<n>x<n>/<rotation>/<transfer_rule>/<endgame_presses>/retrograde.npz
+compressed_game_tablebase/<n>x<n>/<rotation>/<transfer_rule>/<endgame_presses>/<player>/completion_<pieces>.json
+```
+
+`counterclockwise` is answered from the `clockwise` table by reflection. The endgame-press flag
+has the same meaning everywhere: `extra_rotation_allowed` (on) or `extra_rotation_not_allowed`
+(off). Both tables are checked in for the current layout, so a lookup is exact out of the box.
+
+A report names the position it is about by its **state alone**: one digit per cell, row by row,
+so a 4x4 position reads as `0012122111222121`. The rules and the side to move are not part of the
+name — they are what the tablebase directory is for:
+
+```
+- Position ID:         0012122111222121
+```
+
+The reported line always runs to the end of the game. A position that reaches a full board without
+a line is followed through the presses, and stops on the press that makes a line, or after the
+fifth press:
+
+```
+State after move 2:                 # the board is now full and still has no line
+Move 3 (o) : {... 'rotation_only': True} (endgame press 1 of 5)
+State after move 3:                 # still no line: the game is not over yet
+Move 4 (x) : {... 'rotation_only': True} (endgame press 2 of 5)
+State after move 4:                 # x holds a line: this is the end of the game
 ```
 
 Python API:
@@ -84,7 +135,8 @@ import orbital_logic_game_functions as olgf
 # Exact lookup (O(1) with a tablebase hit)
 board = np.array([[1,0,0],[2,0,0],[0,0,0]])          # Black to move
 sol = get_solution.lookup_solution(board, player_turn=2,
-                                   rotate_direction="clockwise", transfer_allowed=True)
+                                   rotate_direction="clockwise", transfer_allowed=True,
+                                   extra_rotation_allowed=True)
 print(sol["score"], sol["game_result"])                # 995 player2_wins
 
 # Play the perfect move
@@ -97,6 +149,21 @@ move, value = solve_game.find_best_move(board, rotate_direction="clockwise", pla
 res = computer_engine.choose_move(board, player_turn=1, rotation="clockwise",
                                   transfer_allowed=True, time_limit=5.0)
 print(res["source"], res["move"], res["message"])
+```
+
+The endgame rule is a parameter everywhere (`extra_rotation_allowed`, on by default), and the
+number of presses already played is passed as `extra_turns`; the board alone cannot say how far
+into the presses a position is:
+
+```python
+# a full board without a line: the answer is a forced press, then the value
+full = np.array([[1, 1, 2], [2, 2, 1], [1, 2, 1]])
+move = olgf.rotation_only_move(1, "clockwise")
+print(move["rotation_only"], move["add"], move["transfer"])          # True None None
+res = computer_engine.choose_move(full, player_turn=1, rotation="clockwise",
+                                  use_tablebase=False, fallback="search",
+                                  time_limit=1.0, extra_turns=3)
+print(res["source"], res["presses_remaining"])         # endgame 2
 ```
 
 ## How it is solved (in brief)
@@ -115,32 +182,62 @@ the end of the game falls out of the sweep for free, so the tables store the val
 optimal line length. Every `(board, side to move)` pair is evaluated exactly once for the whole
 context, instead of once per referring position as a normal search does.
 
+The bottom layer of that sweep is the endgame. A full board without a line has no move to
+generate, so when the presses are allowed it is finished by replaying them instead: at most five
+ring rotations, and the value of the position is whatever the last one leaves on the board
+(`WIN_SCORE - presses_needed` for a line, `0` for a draw). The presses do not occupy cells, so
+that counter lives beside the board, never inside it — which is why the tables only store the
+position before the first press and the rest is replayed on lookup.
+
 Positions are stored in two dense arrays indexed by the base-3 code of the row-major board, so
 a query is a single array index. Two isomorphisms halve the data again: a colour swap means
 player-2-to-move positions are answered from the swapped board, and a reflection maps the
 clockwise game onto the counterclockwise one, so only `still` and `clockwise` tables are built.
 
-This is 38 MB where the equivalent JSON records could be tens of GB, and it is what makes 4x4 playable.
+The whole 4x4 value tablebase, both settings of the endgame rule, is 77 MiB — a few per cent of
+what the equivalent per-position JSON records would need, and it is what makes 4x4 playable.
 
 Fallbacks, used automatically when a position is not in a table:
 
 | Tier | Source | Notes |
 | --- | --- | --- |
 | 1 | Retrograde value table | exact, O(1) |
-| 2 | Symmetry-reduced JSON tablebase | exact, ~15x smaller than the full one |
+| 2 | Symmetry-reduced JSON tablebase | exact, ~15x smaller than one tablebase per position |
 | 3 | Negamax + alpha/beta + transposition table | exact but depth/time-bounded |
 
 ## Precomputed tablebases
 
-| Grid | Table entries | Positions stored | Size |
-| --- | --- | --- | --- |
-| 1x1 | 3 | 2 | <1 kB |
-| 2x2 | 81 | 29 | <1 kB |
-| 3x3 | 19,683 | 5,478 - 6,034 | <1 kB |
-| 4x4 | 43,046,721 | 9,721,176 - 10,161,173 | 5.6 - 12.5 MB |
+The value tables in `retrograde_game_tablebase/`, all eight contexts of each grid size:
 
-Four contexts per grid size (`still` and `clockwise` x transfer allowed / not allowed),
-16 files, ~38 MB total. `counterclockwise` is served from `clockwise` by reflection.
+| Grid | Table entries | Positions stored per context | Size per context | Total |
+| --- | --- | --- | --- | --- |
+| 1x1 | 3 | 2 | 0.8 KiB | 8 KiB |
+| 2x2 | 81 | 29 | 0.9 KiB | 8 KiB |
+| 3x3 | 19,683 | 5,478 - 6,034 | 7.3 - 8.3 KiB | 64 KiB |
+| 4x4 | 43,046,721 | 9,721,176 - 10,161,173 | 5.3 - 13.4 MiB | 77.4 MiB |
+
+and the JSON records in `compressed_game_tablebase/`:
+
+| Grid | Files | Records | Total |
+| --- | --- | --- | --- |
+| 1x1 | 16 | 24 | 10 KiB |
+| 2x2 | 40 | 180 | 100 KiB |
+| 3x3 | 80 | 31,524 | 32.5 MiB |
+
+Eight contexts per grid size (`still` and `clockwise` x transfer allowed / not allowed x endgame
+presses on / off), so twice as many files and roughly twice the data of a single rule. `still` and
+`clockwise` are the only rotations that are built: `counterclockwise` is served from `clockwise`
+by reflection. `positions stored` counts the positions a context actually reaches — far fewer than
+the table entries, because a finished game is never expanded further — and the compressed records
+store one entry per class of symmetric boards instead.
+
+These files are built by the two generators above and match the current code, so `get_solution`
+answers 1x1 to 4x4 exactly and the GUI reports the grid sizes it can play on. Rebuild them with
+
+```bash
+python retrograde_tablebase.py -n 4 --workers 8        # 1x1 to 4x4, ~77 MiB
+python create_game_tablebase.py -n 3 --workers 8       # 1x1 to 3x3, ~33 MiB
+```
 
 ## Repository layout
 
@@ -149,19 +246,22 @@ Four contexts per grid size (`still` and `clockwise` x transfer allowed / not al
 | `orbital_logic_game_functions.py` | rules engine: evaluation, rotation, move generation, `play_turn`, state conversions, board statistics |
 | `solve_game.py` | negamax + alpha/beta + transposition table solver, PV reconstruction, iterative deepening, parallel root |
 | `retrograde_tablebase.py` | retrograde value-table builder, reader and verifier |
-| `create_game_tablebase.py` | JSON tablebase generator (full + compressed) and the shared symmetry helpers |
-| `get_solution.py` | unified lookup API and CLI over all tablebase sources |
-| `computer_engine.py` | policy layer (tablebase → search → random) and the background engine process |
+| `create_game_tablebase.py` | compressed JSON tablebase generator and the shared symmetry helpers |
+| `get_solution.py` | unified lookup API and CLI over the tablebase sources |
+| `computer_engine.py` | policy layer (tablebase → endgame presses → search → random) and the background engine process |
 | `gui.py` | the entire Pygame front-end |
 | `test_game.py` | vectorised Monte-Carlo random-play statistics |
 | `solver.md` | detailed notes on the solving machinery |
 | `symmetry_observations.md` | design notes behind the compressed tablebase |
 
-| Directory | Size | Contents |
-| --- | --- | --- |
-| `retrograde_game_tablebase/` | 38 MB | `retrograde.npz` value tables, **1x1 to 4x4** |
-| `compressed_game_tablebase/` | 17 MB | symmetry-reduced JSON, **1x1 to 3x3** |
-| `game_tablebase/` | 248 MB | full JSON, **1x1 to 3x3** |
+| Directory | Contents |
+| --- | --- |
+| `retrograde_game_tablebase/` | `retrograde.npz` value tables, **1x1 to 4x4** |
+| `compressed_game_tablebase/` | symmetry-reduced JSON records, **1x1 to 3x3** |
+
+The full per-position JSON tablebase that used to live in `game_tablebase/` has been removed: the
+compressed records hold the same values and lines in a fraction of the space, so the full variant
+was neither generated nor read any more.
 
 ## Credits
 

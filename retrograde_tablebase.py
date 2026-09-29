@@ -23,19 +23,31 @@ depth bookkeeping is needed and the distance to the terminal node comes out of
 the sweep for free. A position is a draw exactly when none of its children
 loses, which the sweep answers without any unknown-value bookkeeping.
 
+The endgame presses
+-------------------
+A full board without a line is decided by the ``EXTRA_TURNS`` forced Orbito
+presses, and a press is nothing but a rotation, so a position in the endgame
+has no children in the graph: it is a terminal node whose value follows from
+the board alone. That is what the sweep writes for the deepest layer when
+``extra_rotation_allowed`` is set, and it is the only layer whose values the
+endgame presses change: a press never alters the number of occupied cells, so
+every earlier layer is untouched. How many of the presses are already spent is
+not part of the board, so it lives with the caller of the table and the
+remaining presses are replayed on the way out rather than stored.
+
 Stored format
 -------------
-One file per (grid size, rotation direction, transfer rule)::
+One file per (grid size, rotation direction, transfer rule, endgame press rule)::
 
-    <base_dir>/<n>x<n>/<rotation>/<transfer rule>/retrograde.npz
+    <base_dir>/<n>x<n>/<rotation>/<transfer rule>/<endgame presses>/retrograde.npz
 
 It holds two dense arrays indexed by the base-3 code of the row-major board:
 ``score`` (int16) is the negamax value from the point of view of the side to
 move, or ``UNSOLVED`` when the position is not stored, and ``dtx`` (uint8) is
 the number of plies to the terminal node. A lookup is a single array index
 instead of a scan over a JSON array. The JSON records of a 4x4 grid already
-occupy about 4 GB, while the value tables of all six rule contexts together take
-roughly 60 MB.
+occupy about 4 GB, while the value tables of all rule contexts together take
+roughly 100 MB.
 
 Only positions of games where player 1 made the first move are stored. A game
 where player 2 started is the same game with the two colours exchanged, so
@@ -82,7 +94,7 @@ import solve_game
 
 
 RETROGRADE_FILENAME = "retrograde.npz"
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
 UNSOLVED = np.int16(32767)
 WIN_SCORE = int(solve_game.WIN_SCORE)
 _NO_DISTANCE = 256
@@ -117,7 +129,7 @@ class _Codec:
     evaluates tens of millions of edges.
     """
 
-    def __init__(self, grid_size, rotate_direction, transfer_allowed):
+    def __init__(self, grid_size, rotate_direction, transfer_allowed, extra_rotation_allowed=True):
         grid_size = int(grid_size)
         if grid_size < 1:
             raise ValueError("grid_size must be positive")
@@ -128,11 +140,12 @@ class _Codec:
                 "a board may hold at most 255 cells, because the distance to "
                 "the terminal node is stored in a single byte"
             )
-        params = solve_game._engine_params(grid_size, rotate_direction, transfer_allowed)
+        params = solve_game._engine_params(grid_size, rotate_direction, transfer_allowed, extra_rotation_allowed)
         self.lines_first_rest = params[3]
         self.neighbours = params[5]
         self.perm = params[6]
         self.transfer_allowed = bool(transfer_allowed)
+        self.extra_rotation_allowed = bool(extra_rotation_allowed)
         self.size = 3 ** self.cell_count
         self.weights = [3 ** (self.cell_count - 1 - index) for index in range(self.cell_count)]
         if self.perm is None:
@@ -309,6 +322,7 @@ def enumerate_reachable(
     grid_size,
     rotation,
     transfer_allowed,
+    extra_rotation_allowed=True,
     workers=None,
     show_progress=True,
 ):
@@ -317,9 +331,10 @@ def enumerate_reachable(
     Returns the codec for the context and a list with one sorted array per ply,
     starting with the empty board at index 0. Children of positions where the
     game is already over are pruned, so only boards that can occur in a real
-    game are returned.
+    game are returned. The endgame presses are rotations, so they add no child
+    and leave the enumeration itself untouched.
     """
-    codec = _Codec(grid_size, rotation, transfer_allowed)
+    codec = _Codec(grid_size, rotation, transfer_allowed, extra_rotation_allowed)
     pool_context = _pool_context(workers)
     progress = tablebase._make_progress(
         codec.cell_count + 1,
@@ -425,6 +440,24 @@ def _child_value(base, destination_weights, move, player, score, dtx, codec):
     return int(score[child]), int(dtx[child])
 
 
+def _endgame_entry(board, player, codec):
+    """The ``(score, dtx)`` of a position in the endgame.
+
+    A full board without a line has no children in the game graph: with the
+    endgame presses switched off it is the draw, and with them switched on the
+    presses are forced, so the value is the outcome of the first press that
+    shows a line, counted from this position. Both come from the board alone,
+    which is why this is where the deepest layer of the sweep is decided.
+    """
+    outcome = solve_game.endgame_outcome(
+        board, codec.perm, codec.lines_first_rest, codec.extra_rotation_allowed,
+    )
+    if outcome is None:
+        return 0, 0
+    winner, turns, _boards = outcome
+    return solve_game.endgame_score(winner, turns, player), turns
+
+
 def _evaluate_position(code, player, score, dtx, codec):
     """Return the ``(score, dtx)`` of one position from the values of its children."""
     board = codec.decode(code)
@@ -438,7 +471,7 @@ def _evaluate_position(code, player, score, dtx, codec):
         board, player, codec.transfer_allowed, codec.neighbours, codec.cell_count,
     )
     if not moves:
-        return 0, 0
+        return _endgame_entry(board, player, codec)
 
     base, destination_weights = codec.base_and_destination_weights(board)
     combined = _combine_children(
@@ -523,18 +556,19 @@ def sweep_layers(codec, layers, workers=None, show_progress=True):
 # Building and storing
 # ---------------------------------------------------------------------------
 
-def context_directory(base_dir, grid_size, rotation, transfer_allowed):
+def context_directory(base_dir, grid_size, rotation, transfer_allowed, extra_rotation_allowed=True):
     return os.path.join(
         str(base_dir),
         f"{int(grid_size)}x{int(grid_size)}",
         tablebase._canonical_rotation(rotation),
         tablebase._transfer_name(transfer_allowed),
+        tablebase._extra_rotation_name(extra_rotation_allowed),
     )
 
 
-def context_file(base_dir, grid_size, rotation, transfer_allowed):
+def context_file(base_dir, grid_size, rotation, transfer_allowed, extra_rotation_allowed=True):
     return os.path.join(
-        context_directory(base_dir, grid_size, rotation, transfer_allowed),
+        context_directory(base_dir, grid_size, rotation, transfer_allowed, extra_rotation_allowed),
         RETROGRADE_FILENAME,
     )
 
@@ -544,14 +578,16 @@ def build_context_tablebase(
     grid_size,
     rotation,
     transfer_allowed,
+    extra_rotation_allowed=True,
     workers=None,
     show_progress=True,
 ):
     """Build and store the value table for a single rule context."""
     rotation = tablebase._canonical_rotation(rotation)
     transfer_allowed = bool(transfer_allowed)
+    extra_rotation_allowed = bool(extra_rotation_allowed)
     codec, layers = enumerate_reachable(
-        grid_size, rotation, transfer_allowed,
+        grid_size, rotation, transfer_allowed, extra_rotation_allowed,
         workers=workers, show_progress=show_progress,
     )
     score, dtx = sweep_layers(
@@ -563,13 +599,15 @@ def build_context_tablebase(
         "grid_size": int(grid_size),
         "rotation": rotation,
         "transfer_allowed": transfer_allowed,
+        "extra_rotation_allowed": extra_rotation_allowed,
+        "extra_turns": int(solve_game.EXTRA_TURNS) if extra_rotation_allowed else 0,
         "starting_player": 1,
         "score_convention": "negamax value from the point of view of the side to move",
         "positions": positions,
         "layer_sizes": [int(len(codes)) for codes in layers],
         "table_entries": int(codec.size),
     }
-    file_path = context_file(base_dir, grid_size, rotation, transfer_allowed)
+    file_path = context_file(base_dir, grid_size, rotation, transfer_allowed, extra_rotation_allowed)
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
     np.savez_compressed(
         file_path,
@@ -582,6 +620,7 @@ def build_context_tablebase(
         "grid_size": int(grid_size),
         "rotation": rotation,
         "transfer_allowed": transfer_allowed,
+        "extra_rotation_allowed": extra_rotation_allowed,
         "positions": positions,
         "layer_sizes": metadata["layer_sizes"],
     }
@@ -592,27 +631,29 @@ def build_tablebase(
     grid_size,
     rotations=STORED_ROTATIONS,
     transfers=tablebase.TRANSFER_RULES,
+    extra_rotations=tablebase.EXTRA_ROTATION_RULES,
     workers=None,
     show_progress=True,
-    tablebase_type="compressed",
 ):
     """Build the value table for every requested rule context of a grid size."""
     grid_size = int(grid_size)
     if grid_size < 1:
         raise ValueError("grid_size must be positive")
     if base_dir is None:
-        base_dir = tablebase.default_base_dir(tablebase_type)
+        base_dir = tablebase.default_base_dir()
     contexts = []
     for rotation in _normalise_rotations(rotations):
         for transfer_allowed in _normalise_transfers(transfers):
-            contexts.append(build_context_tablebase(
-                base_dir,
-                grid_size,
-                rotation,
-                transfer_allowed,
-                workers=workers,
-                show_progress=show_progress,
-            ))
+            for extra_rotation_allowed in _normalise_extra_rotations(extra_rotations):
+                contexts.append(build_context_tablebase(
+                    base_dir,
+                    grid_size,
+                    rotation,
+                    transfer_allowed,
+                    extra_rotation_allowed,
+                    workers=workers,
+                    show_progress=show_progress,
+                ))
     return {
         "grid_size": grid_size,
         "base_dir": str(base_dir),
@@ -657,12 +698,32 @@ def _normalise_transfers(transfers):
     return result
 
 
+def _normalise_extra_rotations(extra_rotations):
+    if isinstance(extra_rotations, str):
+        name = extra_rotations.strip().lower()
+        if name == "all":
+            return list(tablebase.EXTRA_ROTATION_RULES)
+        if name in ("allowed", "true", "yes"):
+            return [True]
+        if name in ("not_allowed", "not-allowed", "false", "no"):
+            return [False]
+        raise ValueError(f"unknown endgame press selection: {extra_rotations}")
+    result = []
+    for extra_rotation in extra_rotations:
+        value = bool(extra_rotation)
+        if value not in result:
+            result.append(value)
+    if not result:
+        raise ValueError("at least one endgame press rule is required")
+    return result
+
+
 # ---------------------------------------------------------------------------
 # Reading the stored tables
 # ---------------------------------------------------------------------------
 
 class ValueTable:
-    """A loaded value table for one (grid size, rotation, transfer rule) context."""
+    """A loaded value table for one rule context of a grid size."""
 
     def __init__(self, codec, score, dtx, metadata, file_path):
         self.codec = codec
@@ -699,11 +760,12 @@ class ValueTable:
         return score, int(self.dtx[code])
 
 
-def load_table(base_dir, grid_size, rotation, transfer_allowed):
+def load_table(base_dir, grid_size, rotation, transfer_allowed, extra_rotation_allowed=True):
     """Load a stored value table, or return None when no file is available."""
     rotation = tablebase._canonical_rotation(rotation)
     transfer_allowed = bool(transfer_allowed)
-    file_path = context_file(base_dir, grid_size, rotation, transfer_allowed)
+    extra_rotation_allowed = bool(extra_rotation_allowed)
+    file_path = context_file(base_dir, grid_size, rotation, transfer_allowed, extra_rotation_allowed)
     try:
         stat = os.stat(file_path)
     except OSError:
@@ -721,7 +783,7 @@ def load_table(base_dir, grid_size, rotation, transfer_allowed):
         return None
     if metadata.get("format_version") != FORMAT_VERSION:
         return None
-    codec = _Codec(grid_size, rotation, transfer_allowed)
+    codec = _Codec(grid_size, rotation, transfer_allowed, extra_rotation_allowed)
     if score.size != codec.size or dtx.size != codec.size:
         return None
     while len(_table_cache) >= _TABLE_CACHE_LIMIT:
@@ -731,7 +793,8 @@ def load_table(base_dir, grid_size, rotation, transfer_allowed):
 
 
 def available_contexts(base_dir, grid_size):
-    """Return the ``(rotation, transfer_allowed)`` pairs stored for a grid size."""
+    """Return the ``(rotation, transfer_allowed, extra_rotation_allowed)`` contexts
+    stored for a grid size."""
     grid_folder = os.path.join(str(base_dir), f"{int(grid_size)}x{int(grid_size)}")
     found = []
     try:
@@ -747,10 +810,49 @@ def available_contexts(base_dir, grid_size):
         except OSError:
             continue
         for transfer in transfers:
-            if not os.path.exists(os.path.join(rotation_folder, transfer, RETROGRADE_FILENAME)):
+            transfer_folder = os.path.join(rotation_folder, transfer)
+            if not os.path.isdir(transfer_folder):
                 continue
-            found.append((rotation, transfer == tablebase._transfer_name(True)))
+            try:
+                extra_rotations = sorted(os.listdir(transfer_folder))
+            except OSError:
+                continue
+            for extra_rotation in extra_rotations:
+                if not os.path.exists(
+                    os.path.join(transfer_folder, extra_rotation, RETROGRADE_FILENAME),
+                ):
+                    continue
+                found.append((
+                    rotation,
+                    transfer == tablebase._transfer_name(True),
+                    extra_rotation == tablebase._extra_rotation_name(True),
+                ))
     return found
+
+
+def _endgame_presses(cells, player, codec, rotation, grid_size):
+    """The forced presses that finish a position, as moves and as boards.
+
+    The stored value of a position in the endgame already includes the presses,
+    so a reconstructed line has to be completed with them to reach the same
+    distance. They are replayed here instead of being read from the table,
+    because a press never changes the board's occupancy and therefore has no
+    layer of its own.
+    """
+    outcome = solve_game.endgame_outcome(
+        cells, codec.perm, codec.lines_first_rest, codec.extra_rotation_allowed,
+    )
+    if outcome is None:
+        return [], []
+    _winner, _turns, boards = outcome
+    moves = []
+    states = []
+    mover = int(player)
+    for board in boards:
+        moves.append(olgf.rotation_only_move(mover, rotation))
+        mover = 3 - mover
+        states.append(np.asarray(board, dtype=int).reshape((grid_size, grid_size)))
+    return moves, states
 
 
 def principal_variation(table, state, player_turn, rotation):
@@ -759,7 +861,9 @@ def principal_variation(table, state, player_turn, rotation):
     The tables only hold values, so the line is recovered by walking down the
     layers and letting :func:`_combine_children` pick the child at every ply.
     That is the same rule the sweep uses, so the reconstructed line is the line
-    the stored values were built from.
+    the stored values were built from. A line that runs into the endgame is
+    finished by the forced presses, which is what brings its length to the
+    distance the table stores.
     """
     codec = table.codec
     grid_size = codec.grid_size
@@ -788,11 +892,18 @@ def principal_variation(table, state, player_turn, rotation):
                 continue
             children.append((child_score, int(dtx_of[child]), move))
         if not children:
+            # No child left: the endgame presses are what the line continues with.
+            press_moves, press_states = _endgame_presses(cells, player, codec, rotation, grid_size)
+            moves_sequence.extend(press_moves)
+            states_sequence.extend(press_states)
             break
         combined = _combine_children(
             (child_score, child_dtx) for child_score, child_dtx, _ in children
         )
         if combined is None:
+            press_moves, press_states = _endgame_presses(cells, player, codec, rotation, grid_size)
+            moves_sequence.extend(press_moves)
+            states_sequence.extend(press_states)
             break
         best_move = children[combined[2]][2]
         moves_sequence.append(solve_game._move_to_dict(best_move, player, rotation, grid_size))
@@ -801,6 +912,14 @@ def principal_variation(table, state, player_turn, rotation):
         )
         states_sequence.append(np.asarray(cells, dtype=int).reshape((grid_size, grid_size)))
         player = 3 - player
+    else:
+        # Every cell has been filled, so the loop ran out rather than reaching a
+        # terminal state. That is exactly the endgame: the presses are still to
+        # be played, and they decide the game.
+        if solve_game._winner(cells, codec.lines_first_rest) is None:
+            press_moves, press_states = _endgame_presses(cells, player, codec, rotation, grid_size)
+            moves_sequence.extend(press_moves)
+            states_sequence.extend(press_states)
     return moves_sequence, states_sequence
 
 
@@ -810,6 +929,7 @@ def _record_for_entry(
     player_turn,
     rotation,
     transfer_allowed,
+    extra_rotation_allowed,
     score,
     moves_sequence,
     states_sequence,
@@ -823,7 +943,7 @@ def _record_for_entry(
     else:
         game_result = "draw"
     record = {
-        "id": tablebase.get_position_id(state, rotation, transfer_allowed, player_turn),
+        "id": tablebase.position_state_id(state),
         "position": np.asarray(state, dtype=int).tolist(),
         "solution": {
             "score": score,
@@ -839,7 +959,7 @@ def _record_for_entry(
     return record
 
 
-def build_record(base_dir, state, player_turn, rotate_direction, transfer_allowed):
+def build_record(base_dir, state, player_turn, rotate_direction, transfer_allowed, extra_rotation_allowed=True):
     """Return a tablebase record shaped like the JSON ones, or None.
 
     ``get_solution`` consumes records with a fixed layout, so the value tables
@@ -856,22 +976,23 @@ def build_record(base_dir, state, player_turn, rotate_direction, transfer_allowe
     grid_size = state.shape[0]
     rotation = tablebase._canonical_rotation(rotate_direction)
     transfer_allowed = bool(transfer_allowed)
+    extra_rotation_allowed = bool(extra_rotation_allowed)
     player = int(player_turn)
 
-    table = load_table(base_dir, grid_size, rotation, transfer_allowed)
+    table = load_table(base_dir, grid_size, rotation, transfer_allowed, extra_rotation_allowed)
     if table is not None:
         entry = table.entry(state, player)
         if entry is not None:
             moves, states = principal_variation(table, state, player, rotation)
             return _record_for_entry(
-                base_dir, state, player, rotation, transfer_allowed,
+                base_dir, state, player, rotation, transfer_allowed, extra_rotation_allowed,
                 entry[0], moves, states,
             )
 
     counterpart = _COUNTERPART_ROTATION.get(rotation)
     if counterpart is None:
         return None
-    table = load_table(base_dir, grid_size, counterpart, transfer_allowed)
+    table = load_table(base_dir, grid_size, counterpart, transfer_allowed, extra_rotation_allowed)
     if table is None:
         return None
     reflected = tablebase._apply_symmetry(state, _REFLECTION)
@@ -889,7 +1010,7 @@ def build_record(base_dir, state, player_turn, rotate_direction, transfer_allowe
         tablebase.map_compressed_state(item, _REFLECTION) for item in stored_states
     ]
     return _record_for_entry(
-        base_dir, state, player, rotation, transfer_allowed,
+        base_dir, state, player, rotation, transfer_allowed, extra_rotation_allowed,
         entry[0], moves, states,
         extra={
             "reflected_from": counterpart,
@@ -898,7 +1019,7 @@ def build_record(base_dir, state, player_turn, rotate_direction, transfer_allowe
     )
 
 
-def stored_score(base_dir, state, player_turn, rotate_direction, transfer_allowed):
+def stored_score(base_dir, state, player_turn, rotate_direction, transfer_allowed, extra_rotation_allowed=True):
     """Return ``(score, dtx)`` for a stored position, or None when it is missing.
 
     This is the cheap counterpart of :func:`build_record`: the value is read
@@ -913,11 +1034,12 @@ def stored_score(base_dir, state, player_turn, rotate_direction, transfer_allowe
     grid_size = state.shape[0]
     rotation = tablebase._canonical_rotation(rotate_direction)
     transfer_allowed = bool(transfer_allowed)
+    extra_rotation_allowed = bool(extra_rotation_allowed)
     player = int(player_turn)
     for candidate in (rotation, _COUNTERPART_ROTATION.get(rotation)):
         if candidate is None:
             continue
-        table = load_table(base_dir, grid_size, candidate, transfer_allowed)
+        table = load_table(base_dir, grid_size, candidate, transfer_allowed, extra_rotation_allowed)
         if table is None:
             continue
         probe = state if candidate == rotation else tablebase._apply_symmetry(state, _REFLECTION)
@@ -969,6 +1091,7 @@ def _check_counterpart(
     grid_size,
     rotation,
     transfer_allowed,
+    extra_rotation_allowed,
     table,
     board,
     player_turn,
@@ -987,7 +1110,7 @@ def _check_counterpart(
     if counterpart is None:
         return []
     record = build_record(
-        base_dir, board, player_turn, counterpart, transfer_allowed,
+        base_dir, board, player_turn, counterpart, transfer_allowed, extra_rotation_allowed,
     )
     solution = record["solution"] if record is not None else None
     own = table.entry(
@@ -1007,10 +1130,78 @@ def _check_counterpart(
         ]
     problem = _replay(
         board, solution["moves_sequence"], solution["score"], player_turn, ply,
+        extra_rotation_allowed, table.codec,
     )
     if problem is not None:
         return [f"{counterpart} context: {problem}"]
     return []
+
+
+def _mid_endgame_problems(codec, board, player_turn, score, ply):
+    """Check the presses a position has already spent some of.
+
+    How many of the presses are spent is not part of the board, so the stored
+    value only covers the presses that start at one. A position that has spent
+    some of them is answered by replaying the rest, and the two have to agree on
+    the winner and on the plies still to go: the value of a position grows by one
+    per spent press, because the game is that much closer to its end. The engine
+    entry point is called with the counter as well, so the parameter a caller
+    passes is covered too.
+    """
+    cells = tuple(int(cell) for cell in np.asarray(board).ravel())
+    if any(cell == 0 for cell in cells):
+        return []
+    outcome = solve_game.endgame_outcome(
+        cells, codec.perm, codec.lines_first_rest, codec.extra_rotation_allowed,
+    )
+    if outcome is None:
+        return []
+    problems = []
+    winner, turns, _boards = outcome
+    for spent in range(1, int(solve_game.EXTRA_TURNS) + 1):
+        later = solve_game.endgame_outcome(
+            cells, codec.perm, codec.lines_first_rest, codec.extra_rotation_allowed, spent,
+        )
+        if later is None:
+            continue
+        later_winner, later_turns, _later_boards = later
+        if later_winner != winner:
+            problems.append(
+                f"ply {ply}: the endgame of {np.asarray(board).tolist()} is won by "
+                f"player {later_winner} after {spent} spent presses, but by player "
+                f"{winner} before any was spent"
+            )
+        expected = solve_game.endgame_score(later_winner, later_turns, player_turn)
+        if expected != solve_game.endgame_score(winner, turns - spent, player_turn):
+            problems.append(
+                f"ply {ply}: the value of {np.asarray(board).tolist()} after {spent} "
+                f"spent presses is {expected}, but the stored {score} implies "
+                f"{solve_game.endgame_score(winner, turns - spent, player_turn)}"
+            )
+        move, value = solve_game.find_best_move(
+            np.asarray(board, dtype=int).reshape((codec.grid_size, codec.grid_size)),
+            _rotation_of(codec),
+            codec.transfer_allowed,
+            player_turn,
+            extra_rotation_allowed=codec.extra_rotation_allowed,
+            extra_turns=spent,
+        )
+        if value != expected or not olgf.is_rotation_only(move):
+            problems.append(
+                f"ply {ply}: find_best_move reports {value} after {spent} spent "
+                f"presses for {np.asarray(board).tolist()}, the presses give {expected}"
+            )
+        if later_winner == 0 or later_winner != player_turn:
+            break  # the presses show no line, or one the other player already has
+    return problems
+
+
+def _rotation_of(codec):
+    """The rotation direction a codec plays, as the engine spells it."""
+    for direction in tablebase.ROTATION_DIRECTIONS:
+        if solve_game._engine_params(codec.grid_size, direction, True, True)[6] is codec.perm:
+            return direction
+    return "still"
 
 
 def verify_context(
@@ -1018,9 +1209,11 @@ def verify_context(
     grid_size,
     rotation,
     transfer_allowed,
+    extra_rotation_allowed=True,
     samples_per_layer=4,
     seed=0,
     show_progress=True,
+    plies=None,
 ):
     """Cross-check the stored values of one context against ``solve_game``.
 
@@ -1031,27 +1224,41 @@ def verify_context(
     Each reconstructed principal variation is also replayed through
     ``play_turn`` to confirm that the line is legal, that it has the length the
     stored distance claims, and that it ends the game the way the score predicts.
+    Positions in the endgame are additionally checked part way through the
+    presses, which is the state the stored value cannot describe on its own.
+
+    ``plies`` restricts the check to a range of layers, as ``(first, last)`` or
+    a single layer as ``(ply, ply)``. Re-searching a 4x4 from the empty board
+    takes hours, so a cross-check of the big grid is worth running on its late
+    layers alone.
     """
     rotation = tablebase._canonical_rotation(rotation)
     transfer_allowed = bool(transfer_allowed)
-    table = load_table(base_dir, grid_size, rotation, transfer_allowed)
+    extra_rotation_allowed = bool(extra_rotation_allowed)
+    table = load_table(base_dir, grid_size, rotation, transfer_allowed, extra_rotation_allowed)
     if table is None:
         raise FileNotFoundError(
             f"no stored table for {grid_size}x{grid_size} {rotation} "
-            f"transfer={transfer_allowed} in {base_dir}"
+            f"transfer={transfer_allowed} extra_rotation={extra_rotation_allowed} "
+            f"in {base_dir}"
         )
     rng = random.Random(seed)
     codec = table.codec
     lines_first_rest = codec.lines_first_rest
     progress = tablebase._make_progress(
         codec.cell_count + 1,
-        f"verifying {rotation} transfer={transfer_allowed}",
+        f"verifying {rotation} transfer={transfer_allowed} "
+        f"extra_rotation={extra_rotation_allowed}",
         show_progress,
     )
     checked = 0
     problems = []
+    layers = range(codec.cell_count + 1)
+    if plies is not None:
+        first, last = (plies, plies) if isinstance(plies, int) else tuple(plies)
+        layers = range(max(0, int(first)), min(codec.cell_count, int(last)) + 1)
     try:
-        for ply in range(codec.cell_count + 1):
+        for ply in layers:
             for board in _sample_stored_positions(
                 codec, table.score, ply, rng, samples_per_layer,
             ):
@@ -1064,7 +1271,10 @@ def verify_context(
                         )
                         continue
                     score, dtx = entry
-                    result = solve_game.solve_game(board, rotation, transfer_allowed, player)
+                    result = solve_game.solve_game(
+                        board, rotation, transfer_allowed, player,
+                        extra_rotation_allowed=extra_rotation_allowed,
+                    )
                     if int(result["score"]) != score:
                         problems.append(
                             f"ply {ply}: search says {result['score']}, table says "
@@ -1078,12 +1288,17 @@ def verify_context(
                             f"but the stored distance is {dtx} for {board.tolist()}"
                         )
                         continue
-                    problem = _replay(board, moves, score, player, ply)
+                    problem = _replay(
+                        board, moves, score, player, ply, extra_rotation_allowed, codec,
+                    )
                     if problem is not None:
                         problems.append(problem)
+                    problems.extend(
+                        _mid_endgame_problems(codec, board, player, score, ply)
+                    )
                     checked += 1
                     reflected = _check_counterpart(
-                        base_dir, grid_size, rotation, transfer_allowed,
+                        base_dir, grid_size, rotation, transfer_allowed, extra_rotation_allowed,
                         table, board, player, ply,
                     )
                     if reflected:
@@ -1109,14 +1324,16 @@ def verify_context(
         "grid_size": int(grid_size),
         "rotation": rotation,
         "transfer_allowed": transfer_allowed,
+        "extra_rotation_allowed": extra_rotation_allowed,
         "checked": checked,
         "problems": problems,
     }
 
 
-def _replay(board, moves, score, player_turn, ply):
+def _replay(board, moves, score, player_turn, ply, extra_rotation_allowed=True, codec=None):
     """Play a reconstructed line through the rules and check that it fits."""
     current = np.asarray(board, dtype=int).copy()
+    presses = 0
     for number, move in enumerate(moves):
         before = current.copy()
         try:
@@ -1125,7 +1342,23 @@ def _replay(board, moves, score, player_turn, ply):
             return f"ply {ply}: the reconstructed line was rejected on move {number + 1}: {error}"
         if current.shape != before.shape:
             return f"ply {ply}: the reconstructed line changed the board shape"
+        if olgf.is_rotation_only(move):
+            presses += 1
     finished = olgf.evaluate_game_state(current)
+    if (
+        extra_rotation_allowed
+        and finished is None
+        and olgf.board_is_full(current)
+        and codec is not None
+    ):
+        # The presses are part of the line, so a full board at its end is only
+        # finished once the presses that are left have been played.
+        cells = tuple(int(cell) for cell in current.ravel())
+        outcome = solve_game.endgame_outcome(
+            cells, codec.perm, codec.lines_first_rest, extra_rotation_allowed, presses,
+        )
+        if outcome is not None:
+            finished = outcome[0]
     won = score > 0 and finished == player_turn
     lost = score < 0 and finished == 3 - player_turn
     drew = score == 0 and finished in (None, 0)
@@ -1142,23 +1375,28 @@ def verify_tablebase(
     grid_size,
     rotations=STORED_ROTATIONS,
     transfers=tablebase.TRANSFER_RULES,
+    extra_rotations=tablebase.EXTRA_ROTATION_RULES,
     samples_per_layer=4,
     seed=0,
     show_progress=True,
+    plies=None,
 ):
     """Run :func:`verify_context` for every requested rule context."""
     results = []
     for rotation in _normalise_rotations(rotations):
         for transfer_allowed in _normalise_transfers(transfers):
-            results.append(verify_context(
-                base_dir,
-                grid_size,
-                rotation,
-                transfer_allowed,
-                samples_per_layer=samples_per_layer,
-                seed=seed,
-                show_progress=show_progress,
-            ))
+            for extra_rotation_allowed in _normalise_extra_rotations(extra_rotations):
+                results.append(verify_context(
+                    base_dir,
+                    grid_size,
+                    rotation,
+                    transfer_allowed,
+                    extra_rotation_allowed,
+                    samples_per_layer=samples_per_layer,
+                    seed=seed,
+                    show_progress=show_progress,
+                    plies=plies,
+                ))
     return {
         "grid_size": int(grid_size),
         "checked": sum(item["checked"] for item in results),
@@ -1174,6 +1412,18 @@ def verify_tablebase(
 # ---------------------------------------------------------------------------
 # Command line interface
 # ---------------------------------------------------------------------------
+
+def _parse_plies(text):
+    """Read a ``FROM-TO`` layer range from the command line."""
+    if text is None:
+        return None
+    if "-" in text:
+        first, _sep, last = text.partition("-")
+        if not last:
+            first, last = last, first
+        return int(first), int(last)
+    return int(text)
+
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
@@ -1195,13 +1445,13 @@ def main(argv=None):
         help="'all', 'allowed' or 'not_allowed' (default: all)",
     )
     parser.add_argument(
-        "--base-dir", default=None,
-        help="directory in which to save the tables (default: the selected tablebase directory)",
+        "--extra-rotations", "--endgame-presses", dest="extra_rotations", default="all",
+        help="'all', 'allowed' or 'not_allowed' (default: all); 'allowed' decides a "
+             f"full board without a line with {int(solve_game.EXTRA_TURNS)} Orbito presses",
     )
     parser.add_argument(
-        "--tablebase", "--tablebase-type", "--tablebase_type",
-        dest="tablebase_type", choices=tablebase.TABLEBASE_TYPES, default="compressed",
-        help="only used to pick the default directory (default: compressed)",
+        "--base-dir", default=None,
+        help="directory in which to save the tables (default: the compressed tablebase directory)",
     )
     parser.add_argument(
         "--workers", type=int, default=None,
@@ -1216,25 +1466,32 @@ def main(argv=None):
         help="cross-check the stored values against solve_game with SAMPLES "
              "random positions per layer and context",
     )
+    parser.add_argument(
+        "--plies", default=None, metavar="FROM-TO",
+        help="restrict the cross-check to these layers, e.g. 12-16: re-searching "
+             "a 4x4 from the empty board takes hours, so the big grid is worth "
+             "checking on its late layers alone",
+    )
     args = parser.parse_args(argv)
     if args.grid_size < 1:
         parser.error("grid size must be positive")
 
     base_dir = args.base_dir
     if base_dir is None:
-        base_dir = tablebase.default_base_dir(args.tablebase_type)
+        base_dir = tablebase.default_base_dir()
     result = build_tablebase(
         base_dir,
         args.grid_size,
         rotations=args.rotations,
         transfers=args.transfers,
+        extra_rotations=args.extra_rotations,
         workers=args.workers,
         show_progress=not args.no_progress,
-        tablebase_type=args.tablebase_type,
     )
     for context in result["contexts"]:
         print(
-            f"{context['rotation']} transfer={context['transfer_allowed']}: "
+            f"{context['rotation']} transfer={context['transfer_allowed']} "
+            f"extra_rotation={context['extra_rotation_allowed']}: "
             f"{context['positions']} reachable positions in {context['file']}"
         )
     print(
@@ -1248,8 +1505,10 @@ def main(argv=None):
             args.grid_size,
             rotations=args.rotations,
             transfers=args.transfers,
+            extra_rotations=args.extra_rotations,
             samples_per_layer=args.verify,
             show_progress=not args.no_progress,
+            plies=_parse_plies(args.plies),
         )
         for problem in report["problems"]:
             print(f"MISMATCH: {problem}", file=sys.stderr)

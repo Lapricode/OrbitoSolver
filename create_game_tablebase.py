@@ -7,6 +7,7 @@ import sys
 
 import numpy as np
 
+import orbital_logic_game_functions as olgf
 import solve_game
 
 try:
@@ -18,9 +19,10 @@ except ImportError:
 ROTATION_DIRECTIONS = ("still", "clockwise", "counterclockwise")
 COMPRESSED_ROTATION_DIRECTIONS = ("still", "clockwise")
 TRANSFER_RULES = (False, True)
+EXTRA_ROTATION_RULES = (False, True)
 PLAYER_TURNS = (1, 2)
 COMPRESSED_PLAYER_TURNS = (1,)
-TABLEBASE_TYPES = ("compressed", "full")
+COMPRESSED_TABLEBASE_DIR = "compressed_game_tablebase"
 _ROTATION_ALIASES = {
     "clockwise": "clockwise",
     "cw": "clockwise",
@@ -93,21 +95,17 @@ def _transfer_name(transfer_allowed):
     return "transfer_allowed" if transfer_allowed else "transfer_not_allowed"
 
 
+def _extra_rotation_name(extra_rotation_allowed):
+    return "extra_rotation_allowed" if extra_rotation_allowed else "extra_rotation_not_allowed"
+
+
 def _player_name(player_turn):
     return "player1" if player_turn == 1 else "player2"
 
 
-def normalise_tablebase_type(tablebase_type):
-    name = str(tablebase_type).strip().lower()
-    if name not in TABLEBASE_TYPES:
-        choices = ", ".join(TABLEBASE_TYPES)
-        raise ValueError(f"tablebase_type must be one of: {choices}")
-    return name
-
-
-def default_base_dir(tablebase_type):
-    tablebase_type = normalise_tablebase_type(tablebase_type)
-    return "compressed_game_tablebase" if tablebase_type == "compressed" else "game_tablebase"
+def default_base_dir():
+    """Directory of the compressed tablebase, the only one that is built here."""
+    return COMPRESSED_TABLEBASE_DIR
 
 
 def _canonical_rotation(rotation):
@@ -170,12 +168,40 @@ def _symmetry_transformations(rotate_direction):
     return tuple((True, turns) for turns in range(4))
 
 
+def _turning_changes_the_result(state, rotation):
+    """Tell whether turning a full board can change what the endgame presses decide.
+
+    A full board without a line is decided by the forced presses, and a press is
+    nothing but a rotation, so a board and its rotation can well belong to
+    different games. Storing a rotated representative under the name of the
+    board it came from would then answer for the wrong game, which is why such a
+    board is not canonicalized by rotation. A "still" rotation turns nothing at
+    all, so the presses can only end in a draw there and rotating is harmless.
+    """
+    if _canonical_rotation(rotation) != "clockwise":
+        return False
+    state = _as_state(state)
+    if np.any(state == 0):
+        return False
+    return olgf.evaluate_game_state(state) is None
+
+
+def _symmetry_transformations_for_state(state, rotation):
+    """The symmetries that may be used to store this board, rotations excluded
+    when turning it would change the answer."""
+    transformations = _symmetry_transformations(rotation)
+    if not _turning_changes_the_result(state, rotation):
+        return transformations
+    reflections = tuple(symmetry for symmetry in transformations if symmetry[0])
+    return reflections if reflections else ((False, 0),)
+
+
 def canonicalize_state(state, rotate_direction):
     state = _as_state(state)
     best_key = None
     best_state = None
     best_symmetry = None
-    for symmetry in _symmetry_transformations(rotate_direction):
+    for symmetry in _symmetry_transformations_for_state(state, rotate_direction):
         candidate = _apply_symmetry(state, symmetry)
         key = tuple(int(cell) for cell in candidate.ravel())
         if best_key is None or key < best_key:
@@ -228,39 +254,32 @@ def map_compressed_move(move, symmetry, grid_size, rotate_direction, swap_player
     return mapped
 
 
-def get_file_path(base_dir, state, rotation, transfer_allowed, player_turn):
+def get_file_path(base_dir, state, rotation, transfer_allowed, extra_rotation_allowed, player_turn):
     """Build the existing tablebase path with a JSON completion file."""
     state = _as_state(state)
     grid_size = state.shape[0]
     grid_folder = f"{grid_size}x{grid_size}"
     rotation_folder = _rotation_name(rotation)
     transfer_folder = _transfer_name(transfer_allowed)
+    extra_folder = _extra_rotation_name(extra_rotation_allowed)
     player_folder = _player_name(player_turn)
     pieces_count = int(np.count_nonzero(state))
     completion_file = f"completion_{pieces_count}.json"
-    folder_path = os.path.join(base_dir, grid_folder, rotation_folder, transfer_folder, player_folder)
+    folder_path = os.path.join(base_dir, grid_folder, rotation_folder, transfer_folder, extra_folder, player_folder)
     os.makedirs(folder_path, exist_ok=True)
     return os.path.join(folder_path, completion_file)
 
 
-def get_position_id(state, rotation, transfer_allowed, player_turn):
-    """Return a stable ID for a board and its complete tablebase rule context.
+def position_state_id(state):
+    """Return the ID of a position: the state alone, as base-3 digits.
 
-    The board portion is a row-major sequence of base-3 digits. The grid,
-    rotation, transfer mode, and current player are included so the same board
-    evaluated under different rules still receives a different ID.
+    The cells are written row by row, one digit per cell, so a 4x4 position
+    reads as sixteen digits such as ``0000121102102211``. Nothing else is part
+    of the ID: the grid size is given by the number of digits, and the rules and
+    the side to move are part of the tablebase context, not of the position.
     """
     state = _as_state(state)
-    grid_size = state.shape[0]
-    grid_folder = f"{grid_size}x{grid_size}"
-    board_code = "".join(str(int(cell)) for cell in state.ravel())
-    return "_".join((
-        grid_folder,
-        board_code,
-        _rotation_name(rotation),
-        _transfer_name(transfer_allowed),
-        _player_name(player_turn),
-    ))
+    return "".join(str(int(cell)) for cell in state.ravel())
 
 
 def _json_compatible(value):
@@ -291,8 +310,9 @@ def _read_records(file_path):
     return records
 
 
-def _solve_position(state, rotation, transfer_allowed, player_turn):
-    result = solve_game.solve_game(state, rotation, transfer_allowed, player_turn)
+def _solve_position(state, rotation, transfer_allowed, extra_rotation_allowed, player_turn):
+    result = solve_game.solve_game(state, rotation, transfer_allowed, player_turn,
+                                   extra_rotation_allowed=extra_rotation_allowed)
     score = int(result["score"])
     if score > 0:
         game_result = f"player{player_turn}_wins"
@@ -310,10 +330,9 @@ def _solve_position(state, rotation, transfer_allowed, player_turn):
     }
 
 
-def _make_record(state, solution, rotation, transfer_allowed, player_turn, position_id=None):
+def _make_record(state, solution, rotation, transfer_allowed, extra_rotation_allowed, player_turn, position_id=None):
     return {
-        "id": get_position_id(state, rotation, transfer_allowed, player_turn)
-        if position_id is None else position_id,
+        "id": position_state_id(state) if position_id is None else position_id,
         "position": state.tolist(),
         "solution": _json_compatible(solution),
     }
@@ -326,6 +345,7 @@ def save_game_record(
     game_result,
     rotation,
     transfer_allowed,
+    extra_rotation_allowed,
     player_turn,
     position_id=None,
 ):
@@ -335,12 +355,13 @@ def save_game_record(
     calls idempotent and keeps every generated file valid JSON.
     """
     state = _as_state(state)
-    file_path = get_file_path(base_dir, state, rotation, transfer_allowed, player_turn)
+    file_path = get_file_path(base_dir, state, rotation, transfer_allowed, extra_rotation_allowed, player_turn)
     record = _make_record(
         state,
         {"best_move": best_move, "game_result": game_result},
         rotation,
         transfer_allowed,
+        extra_rotation_allowed,
         player_turn,
         position_id,
     )
@@ -356,13 +377,13 @@ def save_game_record(
 
 
 def _solve_position_task(item):
-    state, rotation, transfer_allowed, player_turn = item
-    return _solve_position(state, rotation, transfer_allowed, player_turn)
+    state, rotation, transfer_allowed, extra_rotation_allowed, player_turn = item
+    return _solve_position(state, rotation, transfer_allowed, extra_rotation_allowed, player_turn)
 
 
-def _solve_states_parallel(states, rotation, transfer_allowed, player_turn, workers):
+def _solve_states_parallel(states, rotation, transfer_allowed, extra_rotation_allowed, player_turn, workers):
     """Solve many independent positions using a pool of worker processes."""
-    tasks = [(state, rotation, transfer_allowed, player_turn) for state in states]
+    tasks = [(state, rotation, transfer_allowed, extra_rotation_allowed, player_turn) for state in states]
     with mp.Pool(workers) as pool:
         return pool.map(_solve_position_task, tasks)
 
@@ -382,39 +403,46 @@ def create_game_tablebase(
     grid_size=2,
     show_progress=True,
     workers=None,
-    tablebase_type="compressed",
 ):
-    """Solve every board state for an n x n grid and selected tablebase type."""
-    tablebase_type = normalise_tablebase_type(tablebase_type)
+    """Solve every board state of the compressed tablebase for an n x n grid.
+
+    The compressed tablebase keeps one record per class of symmetric boards, for
+    both settings of the endgame presses, so the lookup can answer any of the
+    eight rule contexts of a grid from a single file set.
+    """
     if base_dir is None:
-        base_dir = default_base_dir(tablebase_type)
+        base_dir = default_base_dir()
     grid_size = int(grid_size)
     if grid_size < 1:
         raise ValueError("grid_size must be positive")
     if workers is not None:
         workers = int(workers)
 
-    compressed = tablebase_type == "compressed"
-    rotation_directions = COMPRESSED_ROTATION_DIRECTIONS if compressed else ROTATION_DIRECTIONS
-    player_turns = COMPRESSED_PLAYER_TURNS if compressed else PLAYER_TURNS
+    rotation_directions = COMPRESSED_ROTATION_DIRECTIONS
+    player_turns = COMPRESSED_PLAYER_TURNS
     state_count = 3 ** (grid_size * grid_size)
-    context_count = len(rotation_directions) * len(TRANSFER_RULES) * len(player_turns)
+    context_count = (
+        len(rotation_directions)
+        * len(TRANSFER_RULES)
+        * len(EXTRA_ROTATION_RULES)
+        * len(player_turns)
+    )
     total_positions = state_count * context_count
     progress = _make_progress(
         total_positions,
-        f"{grid_size}x{grid_size} {tablebase_type} tablebase",
+        f"{grid_size}x{grid_size} compressed tablebase",
         show_progress,
     )
-    position_ids = set()
+    positions_written = 0
     files_written = 0
 
     try:
         for completion in range(grid_size * grid_size, -1, -1):
             for rotation in rotation_directions:
                 for transfer_allowed in TRANSFER_RULES:
-                    for player_turn in player_turns:
-                        all_states = list(_iter_states_for_completion(grid_size, completion))
-                        if compressed:
+                    for extra_rotation_allowed in EXTRA_ROTATION_RULES:
+                        for player_turn in player_turns:
+                            all_states = list(_iter_states_for_completion(grid_size, completion))
                             states = [
                                 state
                                 for state in all_states
@@ -423,58 +451,59 @@ def create_game_tablebase(
                                     state,
                                 )
                             ]
-                        else:
-                            states = all_states
-                        if compressed and progress is not None:
-                            progress.update(len(all_states))
-                        if not states:
-                            continue
-                        file_path = get_file_path(
-                            base_dir,
-                            states[0],
-                            rotation,
-                            transfer_allowed,
-                            player_turn,
-                        )
-                        if workers is not None and workers > 1 and len(states) > 1:
-                            solutions = _solve_states_parallel(
-                                states,
+                            if progress is not None:
+                                progress.update(len(all_states))
+                            if not states:
+                                continue
+                            file_path = get_file_path(
+                                base_dir,
+                                states[0],
                                 rotation,
                                 transfer_allowed,
-                                player_turn,
-                                workers,
-                            )
-                        else:
-                            solutions = [
-                                _solve_position(state, rotation, transfer_allowed, player_turn)
-                                for state in states
-                            ]
-                        records = []
-                        for state, solution in zip(states, solutions):
-                            record = _make_record(
-                                state,
-                                solution,
-                                rotation,
-                                transfer_allowed,
+                                extra_rotation_allowed,
                                 player_turn,
                             )
-                            if record["id"] in position_ids:
-                                raise RuntimeError(f"Duplicate position ID: {record['id']}")
-                            position_ids.add(record["id"])
-                            records.append(record)
-                        if not compressed:
-                            for _ in records:
-                                if progress is not None:
-                                    progress.update()
-                        _write_records(file_path, records)
-                        files_written += 1
+                            if workers is not None and workers > 1 and len(states) > 1:
+                                solutions = _solve_states_parallel(
+                                    states,
+                                    rotation,
+                                    transfer_allowed,
+                                    extra_rotation_allowed,
+                                    player_turn,
+                                    workers,
+                                )
+                            else:
+                                solutions = [
+                                    _solve_position(state, rotation, transfer_allowed, extra_rotation_allowed, player_turn)
+                                    for state in states
+                                ]
+                            records = []
+                            # the ID is the position alone, so the same board can
+                            # be stored in every context: the check is per file
+                            position_ids = set()
+                            for state, solution in zip(states, solutions):
+                                record = _make_record(
+                                    state,
+                                    solution,
+                                    rotation,
+                                    transfer_allowed,
+                                    extra_rotation_allowed,
+                                    player_turn,
+                                )
+                                if record["id"] in position_ids:
+                                    raise RuntimeError(f"Duplicate position ID: {record['id']}")
+                                position_ids.add(record["id"])
+                                records.append(record)
+                            _write_records(file_path, records)
+                            files_written += 1
+                            positions_written += len(position_ids)
     finally:
         if progress is not None:
             progress.close()
 
     return {
         "grid_size": grid_size,
-        "positions": len(position_ids),
+        "positions": positions_written,
         "files": files_written,
     }
 
@@ -484,7 +513,6 @@ def generate_tablebase(
     grid_size=2,
     show_progress=True,
     workers=None,
-    tablebase_type="compressed",
 ):
     """Backward-compatible alias for create_game_tablebase."""
     return create_game_tablebase(
@@ -492,7 +520,6 @@ def generate_tablebase(
         grid_size,
         show_progress,
         workers=workers,
-        tablebase_type=tablebase_type,
     )
 
 
@@ -500,20 +527,18 @@ def solve_all_2x2_positions(
     base_dir=None,
     show_progress=True,
     workers=None,
-    tablebase_type="compressed",
 ):
-    """Solve the 2x2 tablebase for the selected tablebase type."""
+    """Solve the 2x2 compressed tablebase."""
     return create_game_tablebase(
         base_dir,
         grid_size=2,
         show_progress=show_progress,
         workers=workers,
-        tablebase_type=tablebase_type,
     )
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Create an orbital logic game tablebase.")
+    parser = argparse.ArgumentParser(description="Create the orbital logic game compressed tablebase.")
     parser.add_argument(
         "-n",
         "--grid-size",
@@ -522,18 +547,9 @@ def main(argv=None):
         help="size of the square grid (default: 2)",
     )
     parser.add_argument(
-        "--tablebase",
-        "--tablebase-type",
-        "--tablebase_type",
-        dest="tablebase_type",
-        choices=TABLEBASE_TYPES,
-        default="compressed",
-        help="tablebase to produce (default: compressed)",
-    )
-    parser.add_argument(
         "--base-dir",
         default=None,
-        help="directory in which to save the tablebase (default: selected tablebase directory)",
+        help=f"directory in which to save the tablebase (default: {COMPRESSED_TABLEBASE_DIR})",
     )
     parser.add_argument(
         "--no-progress",
@@ -555,11 +571,10 @@ def main(argv=None):
         grid_size=args.grid_size,
         show_progress=not args.no_progress,
         workers=args.workers,
-        tablebase_type=args.tablebase_type,
     )
     print(
         f"Saved {result['positions']} positions to {result['files']} JSON files "
-        f"in the {result['grid_size']}x{result['grid_size']} tablebase."
+        f"in the {result['grid_size']}x{result['grid_size']} compressed tablebase."
     )
     return result
 

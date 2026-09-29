@@ -1,0 +1,1304 @@
+[
+  {
+    "id": "000010000",
+    "position": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        1,
+        0
+      ],
+      [
+        0,
+        0,
+        0
+      ]
+    ],
+    "solution": {
+      "score": 995,
+      "game_result": "player1_wins",
+      "best_move": {
+        "player": 1,
+        "transfer": null,
+        "add": [
+          0,
+          0
+        ],
+        "rotate": "clockwise"
+      },
+      "moves_sequence": [
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            0
+          ],
+          "rotate": "clockwise"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            2,
+            1
+          ],
+          "rotate": "clockwise"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            1
+          ],
+          "rotate": "clockwise"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            0,
+            0
+          ],
+          "rotate": "clockwise"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            1,
+            0
+          ],
+          "rotate": "clockwise"
+        }
+      ],
+      "states_sequence": [
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            2,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            0,
+            0,
+            1
+          ],
+          [
+            2,
+            1,
+            1
+          ],
+          [
+            0,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            2,
+            2,
+            0
+          ],
+          [
+            0,
+            1,
+            1
+          ],
+          [
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            1,
+            2,
+            2
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            1
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "000020000",
+    "position": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        2,
+        0
+      ],
+      [
+        0,
+        0,
+        0
+      ]
+    ],
+    "solution": {
+      "score": 0,
+      "game_result": "draw",
+      "best_move": {
+        "player": 1,
+        "transfer": null,
+        "add": [
+          0,
+          0
+        ],
+        "rotate": "clockwise"
+      },
+      "moves_sequence": [
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            0
+          ],
+          "rotate": "clockwise"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            0,
+            0
+          ],
+          "rotate": "clockwise"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            2,
+            1
+          ],
+          "rotate": "clockwise"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            0,
+            0
+          ],
+          "rotate": "clockwise"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            2,
+            1
+          ],
+          "rotate": "clockwise"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            1,
+            2
+          ],
+          "rotate": "clockwise"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            0
+          ],
+          "rotate": "clockwise"
+        }
+      ],
+      "states_sequence": [
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            0,
+            2,
+            1
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            0,
+            0,
+            2
+          ],
+          [
+            0,
+            2,
+            1
+          ],
+          [
+            1,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            1,
+            2,
+            2
+          ],
+          [
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            1,
+            0,
+            2
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            1,
+            1,
+            2
+          ]
+        ],
+        [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            1,
+            2,
+            2
+          ],
+          [
+            1,
+            2,
+            2
+          ]
+        ],
+        [
+          [
+            1,
+            1,
+            1
+          ],
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            2,
+            2,
+            2
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "000000010",
+    "position": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        1,
+        0
+      ]
+    ],
+    "solution": {
+      "score": 996,
+      "game_result": "player1_wins",
+      "best_move": {
+        "player": 1,
+        "transfer": null,
+        "add": [
+          2,
+          0
+        ],
+        "rotate": "clockwise"
+      },
+      "moves_sequence": [
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            2,
+            0
+          ],
+          "rotate": "clockwise"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            0,
+            0
+          ],
+          "rotate": "clockwise"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            2,
+            0
+          ],
+          "rotate": "clockwise"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            1,
+            1
+          ],
+          "rotate": "clockwise"
+        }
+      ],
+      "states_sequence": [
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ]
+        ],
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            1,
+            2
+          ],
+          [
+            1,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            1,
+            1
+          ],
+          [
+            0,
+            2,
+            2
+          ],
+          [
+            0,
+            0,
+            0
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "000000020",
+    "position": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        2,
+        0
+      ]
+    ],
+    "solution": {
+      "score": 0,
+      "game_result": "draw",
+      "best_move": {
+        "player": 1,
+        "transfer": null,
+        "add": [
+          1,
+          1
+        ],
+        "rotate": "clockwise"
+      },
+      "moves_sequence": [
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            1,
+            1
+          ],
+          "rotate": "clockwise"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            0,
+            0
+          ],
+          "rotate": "clockwise"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            0
+          ],
+          "rotate": "clockwise"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            2,
+            1
+          ],
+          "rotate": "clockwise"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            0
+          ],
+          "rotate": "clockwise"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            2,
+            1
+          ],
+          "rotate": "clockwise"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            1,
+            0
+          ],
+          "rotate": "clockwise"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            0,
+            2
+          ],
+          "rotate": "clockwise"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": null,
+          "rotate": "clockwise",
+          "rotation_only": true
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": null,
+          "rotate": "clockwise",
+          "rotation_only": true
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": null,
+          "rotate": "clockwise",
+          "rotation_only": true
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": null,
+          "rotate": "clockwise",
+          "rotation_only": true
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": null,
+          "rotate": "clockwise",
+          "rotation_only": true
+        }
+      ],
+      "states_sequence": [
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ]
+        ],
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            2,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            2,
+            1,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            2,
+            1,
+            2
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            0,
+            2,
+            1
+          ],
+          [
+            0,
+            1,
+            2
+          ],
+          [
+            2,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            0,
+            1,
+            2
+          ],
+          [
+            2,
+            1,
+            1
+          ],
+          [
+            0,
+            0,
+            2
+          ]
+        ],
+        [
+          [
+            2,
+            0,
+            1
+          ],
+          [
+            0,
+            1,
+            2
+          ],
+          [
+            2,
+            2,
+            1
+          ]
+        ],
+        [
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            2,
+            1,
+            1
+          ],
+          [
+            2,
+            1,
+            2
+          ]
+        ],
+        [
+          [
+            2,
+            1,
+            2
+          ],
+          [
+            2,
+            1,
+            2
+          ],
+          [
+            1,
+            2,
+            1
+          ]
+        ],
+        [
+          [
+            2,
+            2,
+            1
+          ],
+          [
+            1,
+            1,
+            2
+          ],
+          [
+            2,
+            1,
+            2
+          ]
+        ],
+        [
+          [
+            1,
+            2,
+            2
+          ],
+          [
+            2,
+            1,
+            1
+          ],
+          [
+            1,
+            2,
+            2
+          ]
+        ],
+        [
+          [
+            2,
+            1,
+            2
+          ],
+          [
+            1,
+            1,
+            2
+          ],
+          [
+            2,
+            2,
+            1
+          ]
+        ],
+        [
+          [
+            1,
+            2,
+            1
+          ],
+          [
+            2,
+            1,
+            2
+          ],
+          [
+            2,
+            1,
+            2
+          ]
+        ],
+        [
+          [
+            2,
+            1,
+            2
+          ],
+          [
+            2,
+            1,
+            1
+          ],
+          [
+            1,
+            2,
+            2
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "000000001",
+    "position": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        1
+      ]
+    ],
+    "solution": {
+      "score": 996,
+      "game_result": "player1_wins",
+      "best_move": {
+        "player": 1,
+        "transfer": null,
+        "add": [
+          1,
+          2
+        ],
+        "rotate": "clockwise"
+      },
+      "moves_sequence": [
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            1,
+            2
+          ],
+          "rotate": "clockwise"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            2,
+            0
+          ],
+          "rotate": "clockwise"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            2,
+            2
+          ],
+          "rotate": "clockwise"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            0,
+            1
+          ],
+          "rotate": "clockwise"
+        }
+      ],
+      "states_sequence": [
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            1
+          ]
+        ],
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            2,
+            0,
+            0
+          ],
+          [
+            1,
+            1,
+            0
+          ]
+        ],
+        [
+          [
+            2,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            0
+          ],
+          [
+            1,
+            1,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            2,
+            2
+          ],
+          [
+            1,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            0
+          ]
+        ]
+      ]
+    }
+  },
+  {
+    "id": "000000002",
+    "position": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        2
+      ]
+    ],
+    "solution": {
+      "score": 0,
+      "game_result": "draw",
+      "best_move": {
+        "player": 1,
+        "transfer": null,
+        "add": [
+          1,
+          1
+        ],
+        "rotate": "clockwise"
+      },
+      "moves_sequence": [
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            1,
+            1
+          ],
+          "rotate": "clockwise"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            2,
+            0
+          ],
+          "rotate": "clockwise"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            0,
+            0
+          ],
+          "rotate": "clockwise"
+        },
+        {
+          "player": 2,
+          "transfer": null,
+          "add": [
+            2,
+            0
+          ],
+          "rotate": "clockwise"
+        },
+        {
+          "player": 1,
+          "transfer": null,
+          "add": [
+            2,
+            0
+          ],
+          "rotate": "clockwise"
+        }
+      ],
+      "states_sequence": [
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            2
+          ]
+        ],
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ]
+        ],
+        [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            2,
+            1,
+            0
+          ],
+          [
+            2,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            2,
+            1,
+            0
+          ],
+          [
+            2,
+            1,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            2,
+            2,
+            1
+          ],
+          [
+            2,
+            1,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            2,
+            2,
+            2
+          ],
+          [
+            1,
+            1,
+            1
+          ],
+          [
+            0,
+            0,
+            0
+          ]
+        ]
+      ]
+    }
+  }
+]
