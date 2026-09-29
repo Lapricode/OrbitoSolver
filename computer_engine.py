@@ -260,7 +260,13 @@ def evaluate_moves(
         press = olgf.rotation_only_move(player_turn, rotation)
         following = olgf.play_turn(state, press)
         finished = olgf.evaluate_game_state(following)
-        if finished is not None:
+        if finished == 0:
+            # the first press already shows a line for both players at once,
+            # which the game calls a draw, and a rotation is the move that can do
+            # it: it hands out a line of its own without giving one away
+            score = 0
+            plies = 1
+        elif finished is not None:
             # the first press already shows a line, which settles the game at once
             score = (WIN_SCORE - 1) if finished == player_turn else -(WIN_SCORE - 1)
             plies = 1

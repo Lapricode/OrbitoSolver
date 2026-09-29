@@ -72,7 +72,8 @@ ROTATION_ANIMATION_DURATION = 1.0
 TRANSFER_FLIGHT_END = 1.00  # share of the move spent flying, the rest lands
 ADD_FADE_START = 0.50  # share of the move when the placed piece starts showing
 
-FILL = "fill"  # panel row width meaning "use the whole panel width"
+FILL = "fill"    # panel row width meaning "use the whole panel width"
+HALF = "half"    # panel row width meaning "half the panel width, the gap aside"
 
 PIECE_VALUES = PLAYER_VALUES
 
@@ -555,9 +556,10 @@ class Panel:
 
         ``x`` may be None to place the widget right after the previous one,
         ``width`` and ``height`` may be None to keep the natural size of the
-        widget (centered inside the row), and the width :data:`FILL` uses the
-        rest of the panel. A row added with ``fill`` takes the vertical space
-        left over by the other rows and stretches its widgets.
+        widget (centered inside the row), the width :data:`FILL` uses the rest
+        of the panel and :data:`HALF` half of it, so a row of buttons shares the
+        width. A row added with ``fill`` takes the vertical space left over by
+        the other rows and stretches its widgets.
         """
         self.rows.append({"height": height, "widgets": list(widgets), "fill": fill})
         return self
@@ -608,6 +610,9 @@ class Panel:
                 offset = cursor if x is None else x
                 if width == FILL:
                     final_width = max(20, self.content_width - offset)
+                elif width == HALF:
+                    # a row of buttons that share the width, whatever the panel is
+                    final_width = max(20, (self.content_width - self.spacing) // 2)
                 elif width is None:
                     final_width = widget.rect.width
                 else:
@@ -1282,10 +1287,10 @@ def main():
     editor_panel.add_row(RADIO_ROW_HEIGHT, [(transfer_checkbox, 0, None, None)])
     editor_panel.add_row(RADIO_ROW_HEIGHT, [(extra_checkbox, 0, None, None)])
     editor_panel.add_row(LABEL_ROW_HEIGHT, [(editor_engine_label, 0, FILL, None)])
-    editor_panel.add_row(START_BUTTON_HEIGHT,
-                         [(editor_ask_button, 0, FILL, START_BUTTON_HEIGHT)])
-    editor_panel.add_row(START_BUTTON_HEIGHT,
-                         [(editor_best_button, 0, FILL, START_BUTTON_HEIGHT)])
+    editor_panel.add_row(START_BUTTON_HEIGHT, [
+        (editor_ask_button, 0, HALF, START_BUTTON_HEIGHT),
+        (editor_best_button, None, HALF, START_BUTTON_HEIGHT),
+    ])
     editor_panel.add_row(INPUT_HEIGHT, [
         (editor_clear_button, 0, 150, INPUT_HEIGHT),
         (editor_play_button, None, FILL, INPUT_HEIGHT),
@@ -1309,8 +1314,10 @@ def main():
     play_panel.add_row(46, [(play_status_label, 0, FILL, None)])
     play_panel.add_row(play_log.rect.height, [(play_log, 0, FILL, play_log.rect.height)])
     play_panel.add_row(play_message.rect.height, [(play_message, 0, FILL, play_message.rect.height)])
-    play_panel.add_row(BUTTON_HEIGHT, [(play_hint_button, 0, FILL, BUTTON_HEIGHT)])
-    play_panel.add_row(BUTTON_HEIGHT, [(play_best_button, 0, FILL, BUTTON_HEIGHT)])
+    play_panel.add_row(BUTTON_HEIGHT, [
+        (play_hint_button, 0, HALF, BUTTON_HEIGHT),
+        (play_best_button, None, HALF, BUTTON_HEIGHT),
+    ])
     play_panel.add_row(BUTTON_HEIGHT, [(play_take_back_button, 0, FILL, BUTTON_HEIGHT)])
     play_panel.add_row(BUTTON_HEIGHT, [(play_complete_button, 0, FILL, BUTTON_HEIGHT)])
     play_panel.add_row(BUTTON_HEIGHT, [(play_restart_button, 0, FILL, BUTTON_HEIGHT)])
