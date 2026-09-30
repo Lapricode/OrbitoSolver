@@ -280,6 +280,13 @@ algorithms are the author's; opencode implemented them.
 
 Thanks also to the developers of **NumPy**, **Pygame** and **tqdm**.
 
+## Disclaimer
+
+This is an independent programming exercise created for educational purposes. It is not affiliated
+with or endorsed by the original game or its developers/publishers. References to the game are
+based on publicly available information, and all related intellectual property belongs to its
+respective owners.
+
 ## License
 
 MIT — Copyright (c) 2025 Printzios Lampros. See [LICENSE](LICENSE).
