@@ -77,6 +77,7 @@ orbvenv/bin/python gui.py
 
 ```bash
 python gui.py                       # graphical interface
+python orbito_cli.py                # interactive command line: solve positions and play games
 
 # Look up a position ("0012" is a 2x2 board)
 python get_solution.py 0012 -p 1 -r clockwise --transfer-allowed --endgame-presses
@@ -97,6 +98,46 @@ python test_game.py
 Re-searching a 4x4 from the empty board takes hours, so the cross-check of the big grid is worth
 running on its late layers (`--plies`), where every sample is still proved against the independent
 search engine in seconds.
+
+### Interactive command line
+
+`python orbito_cli.py` asks for the rules of the game one question at a time, every question with a
+default, and then answers from the value tables:
+
+- `s` solves a position: type it as digits (`0012`), as symbols (`xo..`), or `empty` for a fresh
+  board. It prints the best move, how many of the legal moves keep that result, and the perfect
+  game that follows, ply by ply, to its end.
+- `g` plays a game, with the user on `x`, on `o`, or on both sides. Against the computer the moves
+  come from the same tables, so every game is played perfectly.
+- `?` asks for the best move and the perfect continuation at any point of a game, `*` plays the
+  recommended move, `m` values every legal move, `u` undoes, `q` goes back.
+- `r` answers the rules again and starts over, `q` leaves.
+
+Moves are typed as the cell to add a piece on, optionally preceded by a transfer of an opponent's
+piece: `c3` adds at c3, `a1b1 c3` moves the piece on a1 to the neighbouring cell b1 and adds at
+c3, and `a1r c3` does the same with a direction letter (`u`, `d`, `l`, `r`).
+
+A full board without a line is not the end: the forced Orbito presses are played out and the game
+is decided by the first press that shows a line, or after the fifth one. Every game ends by naming
+the result and showing the board it ended on, so the winning line can be read straight off it.
+
+#### Which move is the best one
+
+Several moves usually reach the same result, so the rules ask how to choose between them, and the
+answer changes both the moves the computer plays and the move the tool recommends:
+
+- **r** (the default) ranks every legal move exactly as `computer_engine.best_evaluated_move` does
+  for the Pygame front-end. The perfect value comes first: among the moves that win, the one that
+  ends the game soonest, and among the moves that lose, the one that survives longest. Moves of the
+  same value are separated by how many of the opponent's replies lose the game for the opponent, so
+  the winning side hands over as many chances to slip up as it can. `m` shows the whole ranking,
+  with the result, the length of the game and that reply count for every move.
+- **f** takes the first move of the stored principal variation and does not rank the moves around it.
+  On a 4x4 that is about ten times quicker, at the price of picking whichever of the equally good
+  moves the table happens to store first.
+
+Either way the result of the game is the one the tablebase proves; only the choice between the
+moves that reach it changes.
 
 Every rule context is a separate table directory, and every lookup asks for one of them:
 
@@ -253,6 +294,7 @@ python create_game_tablebase.py -n 3 --workers 8       # 1x1 to 3x3, ~33 MiB
 | `get_solution.py` | unified lookup API and CLI over the tablebase sources |
 | `computer_engine.py` | policy layer (tablebase → endgame presses → search → random) and the background engine process |
 | `gui.py` | the entire Pygame front-end |
+| `orbito_cli.py` | interactive command line: solve any position, or play a game, straight from the value tables |
 | `test_game.py` | vectorised Monte-Carlo random-play statistics |
 | `solver.md` | detailed notes on the solving machinery |
 | `symmetry_observations.md` | design notes behind the compressed tablebase |
