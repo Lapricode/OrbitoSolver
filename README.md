@@ -127,11 +127,22 @@ Several moves usually reach the same result, so the rules ask how to choose betw
 answer changes both the moves the computer plays and the move the tool recommends:
 
 - **r** (the default) ranks every legal move exactly as `computer_engine.best_evaluated_move` does
-  for the Pygame front-end. The perfect value comes first: among the moves that win, the one that
-  ends the game soonest, and among the moves that lose, the one that survives longest. Moves of the
-  same value are separated by how many of the opponent's replies lose the game for the opponent, so
-  the winning side hands over as many chances to slip up as it can. `m` shows the whole ranking,
-  with the result, the length of the game and that reply count for every move.
+  for the Pygame front-end, through the key `computer_engine.move_rank_key`. The perfect value comes
+  first: among the moves that win, the one that ends the game soonest, and among the moves that lose,
+  the one that survives longest. Moves of the same value are then separated by the replies they leave
+  the opponent, counted from the opponent's side, in this order:
+
+  1. the most replies that **lose** for the opponent, so the side that wins hands over as many
+     chances to slip up as it can;
+  2. then the fewest replies that **win** for the opponent, which leaves them the least room to win;
+  3. and last the most replies that **draw** for the opponent, the ways they could still hold on.
+
+  The counts are structural, and that decides how much each one can do: a move that wins leaves the
+  opponent no reply that draws or wins, so only the first criterion ever applies to it, and a move
+  that draws leaves them no reply that wins, so the third is what separates those. All three say
+  something only where the value itself is equal, and for a move that loses they are the only things
+  left to say. `m` shows the whole ranking, with the result, the length of the game and the three
+  reply counts for every move, in that order.
 - **f** takes the first move of the stored principal variation and does not rank the moves around it.
   On a 4x4 that is about ten times quicker, at the price of picking whichever of the equally good
   moves the table happens to store first.

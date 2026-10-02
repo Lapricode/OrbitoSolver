@@ -130,7 +130,6 @@ def move_to_text(move):
 RESULT_WIN = "win"
 RESULT_DRAW = "draw"
 RESULT_LOSS = "loss"
-RESULT_ORDER = {RESULT_WIN: 0, RESULT_DRAW: 1, RESULT_LOSS: 2}
 WIN_SCORE = 1000
 
 
@@ -210,7 +209,7 @@ def evaluate_moves(
     rotation="clockwise",
     transfer_allowed=True,
     base_dir=None,
-    count_traps=True,
+    count_replies=True,
     extra_rotation_allowed=True,
 ):
     """Evaluate every legal move of a position with the stored perfect scores.
@@ -220,9 +219,10 @@ def evaluate_moves(
     player to move**, together with the number of plies the game still needs.
     A stored score is measured from the position it belongs to, so the value of
     a move is rebuilt around the plies left in the new position plus the one the
-    move itself used. The moves come back ordered as the player asked for them:
-    wins first, then draws, then losses, and inside each group the move that ends
-    the game soonest (wins) or lasts longest (losses) comes first.
+    move itself used. The moves come back best first, the order of
+    :func:`move_rank_key`: wins first, then draws, then losses, and inside a
+    group the move that ends the game soonest (wins) or lasts longest (losses),
+    with the reply counts separating the moves of one score.
 
     A position in the endgame has no move but the forced Orbito press, so the
     list holds that single move, valued by replaying the presses that follow it.
@@ -235,12 +235,16 @@ def evaluate_moves(
     - ``result``: ``"win"``, ``"draw"`` or ``"loss"``. A move that gives both
       players a line at once is a draw, the way the game itself calls it.
     - ``moves_to_result``: plies left until the game ends, None for a draw
-    - ``traps``: how many of the opponent's replies in the new position lose
-      for the opponent, the number of chances the move offers to slip up
+    - ``losing_replies``: how many of the opponent's replies in the new position
+      lose for the opponent, the number of chances the move offers to slip up
+    - ``drawing_replies``: how many of them draw instead
+    - ``winning_replies``: how many of them win for the opponent
     - ``text``: one line describing the move, e.g. ``"add (1,1) -> Black wins"``
 
-    ``count_traps=False`` skips the ``traps`` count, which is what the counting
-    itself needs: it is one tablebase lookup per move of the opponent.
+    The three reply counts come from one tablebase lookup per reply of the
+    opponent, so ``count_replies=False`` skips all three. They only break ties
+    between moves of the same perfect score (see :func:`move_rank_key`), which
+    is what the ranking needs and nothing else.
 
     ``complete`` tells whether every legal move could be evaluated; it is False
     when a resulting position is missing from the tablebase. An empty list means
@@ -289,7 +293,9 @@ def evaluate_moves(
             "score": score,
             "result": result_of_score(score),
             "moves_to_result": (plies if score != 0 else None),
-            "traps": 0,
+            "losing_replies": 0,
+            "drawing_replies": 0,
+            "winning_replies": 0,
             "text": move_result_text(press, score, player_turn, plies),
         })
         return evaluated, True
@@ -335,30 +341,45 @@ def evaluate_moves(
             "score": score,
             "result": result_of_score(score),
             "moves_to_result": (plies if score != 0 else None),
-            "traps": (count_losing_replies(following, opponent, rotation,
-                                           transfer_allowed, base_dir,
-                                           extra_rotation_allowed)
-                      if count_traps else 0),
+            **reply_census(following, opponent, rotation, transfer_allowed,
+                           base_dir, count_replies, extra_rotation_allowed),
             "text": move_result_text(move, score, player_turn, plies),
         })
-    evaluated.sort(key=lambda item: (RESULT_ORDER[item["result"]],
-                                     -item["score"], -item["traps"]))
+    # the report reads best first, which is the ranking of move_rank_key read
+    # backwards; the order is stable, so moves that tie on everything keep the
+    # order they were enumerated in
+    evaluated.sort(key=move_rank_key, reverse=True)
     return evaluated, complete
 
 
-def count_losing_replies(state, player_turn, rotation, transfer_allowed, base_dir,
-                         extra_rotation_allowed=True):
-    """How many of the moves of ``player_turn`` lose the game for them.
+def reply_census(state, player_turn, rotation, transfer_allowed, base_dir,
+                 count_replies=True, extra_rotation_allowed=True):
+    """How the replies of ``player_turn`` come out, ready to spread into an item.
 
-    A position that wins for the player to move usually offers them more than
-    one way to play it, and every reply that ends up losing is a chance for the
-    opponent to make a bad next move. Counting them is what turns two moves of
-    the same score into a choice.
+    Every reply of the side to move is evaluated and sorted by its own result,
+    which is what the reply counts of a move are made of. The three numbers say
+    how the game goes if the opponent answers this way or another: how many of
+    their moves lose, how many draw and how many win. All three are handed back
+    as a mapping of the reply fields, so the counts can go straight into an
+    evaluated move.
+
+    ``count_replies=False`` returns zeros instead, which is what the counting
+    itself needs: one lookup per reply of the opponent is the whole cost.
     """
+    census = {"losing_replies": 0, "drawing_replies": 0, "winning_replies": 0}
+    if not count_replies:
+        return census
     moves, _complete = evaluate_moves(
-        state, player_turn, rotation, transfer_allowed, base_dir, count_traps=False,
+        state, player_turn, rotation, transfer_allowed, base_dir, count_replies=False,
         extra_rotation_allowed=extra_rotation_allowed)
-    return sum(1 for item in moves if item["result"] == RESULT_LOSS)
+    for item in moves:
+        if item["result"] == RESULT_LOSS:
+            census["losing_replies"] += 1
+        elif item["result"] == RESULT_DRAW:
+            census["drawing_replies"] += 1
+        else:
+            census["winning_replies"] += 1
+    return census
 
 
 def move_result_text(move, score, player_turn, plies=None):
@@ -383,17 +404,50 @@ def move_result_text(move, score, player_turn, plies=None):
     return f"{move_text} -> {PLAYER_SYMBOLS[player_turn]} {outcome} in {plies} moves"
 
 
+def move_rank_key(item):
+    """The key that orders evaluated moves from the best move to the worst.
+
+    The perfect score comes first, and it is the only criterion that says
+    anything about the result of the game: among the moves that win it puts the
+    one that ends the game soonest first, and among the moves that lose the one
+    that survives longest. Moves of the same score are then separated by the
+    replies they leave the opponent, counted from the opponent's side: the most
+    replies that lose for the opponent come first, then the fewest replies that
+    win for them, and the order ends with the most that draw. The first two ask
+    how often the opponent throws the game away, the second one also asks how
+    little room they have to win it at all, and the last one says how often they
+    hold on when they try.
+
+    The key is written so that a bigger key is the better move, which is what
+    :func:`best_evaluated_move` and the report of the legal moves both use.
+    """
+    return (
+        item["score"],
+        item["losing_replies"],
+        -item["winning_replies"],
+        item["drawing_replies"],
+    )
+
+
+def reply_text(item):
+    """One line fragment saying how the replies of the opponent come out.
+
+    The three counts come in the order :func:`move_rank_key` weighs them in.
+    """
+    return (f"{item['losing_replies']} losing, {item['winning_replies']} winning, "
+            f"{item['drawing_replies']} drawing replies")
+
+
 def best_evaluated_move(evaluated):
     """Pick the move of an evaluation list to actually play.
 
-    The perfect score decides, and moves of the same score are separated by the
-    number of losing replies they leave to the opponent, so the computer takes
-    the move that gives the opponent the most chances to slip up. That only
-    breaks ties, so the result of the game is the one the tablebase proves.
+    The moves are ordered by :func:`move_rank_key`, so the perfect score decides
+    and the replies the move leaves to the opponent only break ties. That means
+    the result of the game is always the one the tablebase proves.
     """
     if not evaluated:
         return None
-    return max(evaluated, key=lambda item: (item["score"], item["traps"]))["move"]
+    return max(evaluated, key=move_rank_key)["move"]
 
 
 def tablebase_entry(state, player_turn, rotation, transfer_allowed, base_dir=None,
@@ -551,9 +605,10 @@ def choose_move(
     guaranteed, because the moves below the horizon were never examined.
 
     A tablebase answer also carries ``moves``: every legal move of the position
-    with its perfect score, ordered wins, draws, losses (see
-    :func:`evaluate_moves`). ``move`` is then the best of them, ties broken by
-    the number of losing replies left to the opponent.
+    with its perfect score, ordered by :func:`move_rank_key`, which is wins,
+    draws, losses and, inside a group, the moves that leave the opponent the
+    most replies that lose, then the fewest that win, then the most that draw.
+    ``move`` is then the best of them.
 
     ``extra_turns`` counts the endgame presses that have already been played.
     They are not part of the board, so the value tables only know the presses
@@ -611,8 +666,8 @@ def choose_move(
             evaluated, complete = evaluate_moves(
                 state, player_turn, rotation, transfer_allowed, base_dir,
                 extra_rotation_allowed=extra_rotation_allowed)
-            # the tablebase decides the result, the traps only pick between the
-            # moves that reach it
+            # the tablebase decides the result, the reply counts only pick
+            # between the moves that reach it
             best = best_evaluated_move(evaluated) or entry["best_move"]
             counted = len(evaluated)
             note = (f" of {counted} legal move{'' if counted == 1 else 's'}"

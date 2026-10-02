@@ -77,7 +77,7 @@ CELL_PATTERN = re.compile(r"([a-z])\s*([0-9]+)")
 MOVE_SEPARATORS = " \t,+-/;:_"
 DIRECTIONS = {"u": (-1, 0), "d": (1, 0), "l": (0, -1), "r": (0, 1)}
 
-MAX_LISTED_MOVES = 40
+MAX_LISTED_MOVES = 100
 COMPUTER_SECONDS = 10.0
 
 # What one answer to "what should be played here" holds: the move, the perfect
@@ -160,7 +160,7 @@ Commands
   ?         the best move and the perfect continuation from here
   ?1  ?2    the same, seen from player 1's or player 2's side
   *         let the computer play the move it would recommend
-  m         value every legal move: result, length, and losing replies
+  m         value every legal move: result, length, and the opponent's replies
   u         undo the last move (two plies against the computer)
   b         show the board again
   h         this help
@@ -181,11 +181,13 @@ every legal move, u undoes, b prints the board and q leaves the game.
 
 The rules are asked once: the board size, the rotation, whether transfers and the
 endgame presses are on, which side you play, and how the best move is picked.
-Ranked, the tool compares every legal move the way the graphical interface does:
-among the moves that win it takes the one that wins soonest and leaves the most
-losing replies, and among the moves that lose it takes the one that survives
-longest. First, it takes the first move of the stored line and does not rank the
-moves around it.
+Ranked, the tool compares every legal move the way the graphical interface does.
+The perfect value decides: among the moves that win the one that wins soonest,
+among the moves that lose the one that survives longest. Moves of one value are
+separated by the replies they leave the opponent, the most that lose for the
+opponent first, then the fewest that win for them, and last the most that draw.
+First, it takes the first move of the stored line and does not rank the moves
+around it.
 """
 
 
@@ -712,12 +714,14 @@ def print_move_evaluation(board, player, rules, evaluated=None, complete=True, b
     """Print every legal move of a position with what it achieves.
 
     Each line gives the move, whether it wins, draws or loses for the side to
-    move, how many plies the game still lasts, and how many of the opponent's
-    replies lose the game for the opponent. The move the tool would play is
-    marked, and the list is ordered as the ranking orders it.
+    move, how many plies the game still lasts, and how the opponent's replies
+    come out when they are counted: how many lose for the opponent, how many
+    win and how many draw. The move the tool would play is marked, and the list
+    is ordered as the ranking orders it.
     """
     if evaluated is None:
-        evaluated, complete = evaluate(board, player, rules, count_traps=rules.ranks_moves())
+        evaluated, complete = evaluate(
+            board, player, rules, count_replies=rules.ranks_moves())
     if not evaluated:
         moves = olgf.get_possible_moves(board, rules.rotation, rules.transfer_allowed, player)
         if not moves:
@@ -734,27 +738,43 @@ def print_move_evaluation(board, player, rules, evaluated=None, complete=True, b
         if len(moves) > len(shown):
             print(f"    ... and {len(moves) - len(shown)} more")
         return
-    counted = any(item["traps"] for item in evaluated)
-    print(wrap(
-        "Every legal move with the result it reaches, how long the game then "
-        "lasts" + (", and how many of the opponent's replies lose the game for "
-                   "the opponent" if counted else "")
-        + ". The marked move is the one the tool would play."
-    ))
+    counted = any(counted_replies(item) for item in evaluated)
+    if counted:
+        print(wrap(
+            "Every legal move with the result it reaches, how long the game then "
+            "lasts, and how the opponent's replies come out. The list is best "
+            "first: the perfect value decides, then the most replies that lose "
+            "for the opponent, then the fewest that win for them, and last the "
+            "most that draw. The marked move is the one the tool would play."
+        ))
+    else:
+        print(wrap(
+            "Every legal move with the result it reaches and how long the game "
+            "then lasts. The list is best first and the marked move is the one "
+            "the tool would play."
+        ))
     print()
     print(f"  {len(evaluated)} legal moves for {SYMBOLS[player]}, best first:")
     shown = evaluated[:MAX_LISTED_MOVES]
     for number, item in enumerate(shown, start=1):
         mark = "->" if best is not None and same_move(item["move"], best) else "  "
         line = (f"  {number:>3}. {mark} {format_move(item['move']):<12} "
-                f"{describe_move_value(item, player)}")
+                f"{describe_move_value(item, player):<24}")
         if counted:
-            line = f"{line:<44} {item['traps']} losing replies"
-        print(line)
+            line += (f" {item['losing_replies']:>3} losing"
+                     f" {item['winning_replies']:>3} winning"
+                     f" {item['drawing_replies']:>3} drawing")
+        print(line.rstrip())
     if len(evaluated) > len(shown):
         print(f"    ... and {len(evaluated) - len(shown)} more")
     if not complete:
         print("    (the tablebase is missing some of the moves, so this list is short)")
+
+
+def counted_replies(item):
+    """Tell whether the replies of an evaluated move were counted at all."""
+    return (item["losing_replies"] or item["drawing_replies"]
+            or item["winning_replies"])
 
 
 def same_move(one, other):
@@ -870,14 +890,15 @@ def lookup(board, player, rules):
         return None
 
 
-def evaluate(board, player, rules, count_traps=False):
+def evaluate(board, player, rules, count_replies=False):
     """Return every legal move of a position with its perfect value.
 
     This is the ranking the graphical interface uses: the value of a move says
     whether it wins, draws or loses for the side to move and how many plies the
-    game still needs, and ``traps`` counts the replies of the opponent that lose
-    the game for them. Counting the traps asks the tablebase once per reply of
-    every move, so it is only worth it when the ranking needs it.
+    game still needs, and the reply counts say how the opponent's answers come
+    out, as losing, winning or drawing for them. Counting the replies asks the
+    tablebase once per reply of every move, so it is only worth it when the
+    ranking needs it.
 
     Returns ``(moves, complete)``. The list is empty when the position is over or
     is not stored, and ``complete`` is False when the tablebase is missing some of
@@ -890,7 +911,7 @@ def evaluate(board, player, rules, count_traps=False):
             rules.rotation,
             rules.transfer_allowed,
             TABLEBASE_DIR,
-            count_traps=count_traps,
+            count_replies=count_replies,
             extra_rotation_allowed=rules.extra_rotation_allowed,
         )
     except (ValueError, IndexError, KeyError):
@@ -924,7 +945,7 @@ def best_move_and_line(board, player, rules, entry, evaluated=None):
     """
     ranked = rules.ranks_moves()
     if evaluated is None:
-        evaluated = evaluate(board, player, rules, count_traps=ranked)
+        evaluated = evaluate(board, player, rules, count_replies=ranked)
     evaluated, complete = evaluated
     stored = entry["moves_sequence"]
 
@@ -1146,7 +1167,7 @@ def play_game(rules, mode):
         if action == "moves":
             print()
             moves, complete = evaluate(
-                board, player, rules, count_traps=rules.ranks_moves())
+                board, player, rules, count_replies=rules.ranks_moves())
             best = None
             entry = lookup(board, player, rules)
             if entry is not None:

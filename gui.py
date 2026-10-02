@@ -2075,11 +2075,12 @@ def main():
         """The report of an answered request as (text, color) blocks.
 
         A tablebase answer is followed by every move the position offers,
-        numbered and in the order that was asked for, with the outcome of each
-        move written in the colour of that outcome. The recommended move is the
-        one the computer plays and is marked with a triangle. The position is
-        always named, so a report without a stored position to quote still says
-        which position was asked about.
+        numbered and best first, with the outcome of each move written in the
+        colour of that outcome. Every move also reports how the replies of the
+        opponent come out, since that is what separates the moves of one score.
+        The recommended move is the one the computer plays and is marked with a
+        triangle. The position is always named, so a report without a stored
+        position to quote still says which position was asked about.
         """
         blocks = [(result["message"], None)]
         if not result.get("text"):
@@ -2094,7 +2095,7 @@ def main():
             for number, item in enumerate(moves, start=1):
                 mark = "-> " if engine.move_to_text(item["move"]) == best else "  "
                 blocks.append((
-                    f"{number}. {mark}{item['text']}, {item['traps']} losing replies",
+                    f"{number}. {mark}{item['text']}, {engine.reply_text(item)}",
                     RESULT_COLORS.get(item["result"]),
                 ))
             if not result.get("moves_complete"):
