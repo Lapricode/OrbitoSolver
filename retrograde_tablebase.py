@@ -72,6 +72,21 @@ empty board. Without that pruning the enumeration also produces boards where a
 player keeps placing pieces after the opponent has already completed a line,
 which the rules score as a draw and which no real game can reach.
 
+
+Bounded memory during the build
+-------------------------------
+A layer of a large grid holds far more codes than fit in RAM, so the build
+never holds a whole layer of edges, a whole layer of results, or a whole task
+queue at once. The children of a layer are deduplicated as they stream in from
+the workers and are flushed to sorted run files once the rolling buffer fills;
+a layer that needed runs is merged on disk into one sorted file, which comes
+back as a memory-mapped array when it is too big for RAM. The sweep scatters
+each chunk of results the moment it arrives and releases a layer as soon as it
+has been swept, and the workers are fed in waves rather than through an
+unbounded queue. The peak footprint of the build therefore follows from the
+buffer sizes in this module rather than from the size of the grid, and the
+result is the same sorted set of codes the single-pass deduplication produced.
+
 One rotation directory is enough
 --------------------------------
 A reflection of the board maps the clockwise game onto the counterclockwise one:
@@ -79,7 +94,7 @@ it turns a clockwise quarter turn into a counterclockwise one, it maps the
 orthogonal adjacency a transfer uses onto itself, and it maps a completed line
 onto a completed line. So the two games are isomorphic, and a counterclockwise
 position is answered from the clockwise table after reflecting the board, with
-the moves reflected back on the way out. Only the ``still`` and ``clockwise``
+the moves reflected back on the way out. Only the ``still`` and ``counterclockwise``
 tables are therefore worth storing, which is what
 :data:`tablebase.COMPRESSED_ROTATION_DIRECTIONS` lists and what this module
 builds by default. The mapping is the one ``create_game_tablebase`` already uses
@@ -119,8 +134,27 @@ _COUNTERPART_ROTATION = {
     "clockwise": "counterclockwise",
     "counterclockwise": "clockwise",
 }
-_TABLE_CACHE_LIMIT = 4
+# Loaded tables are big, so only the two a lookup needs at once are kept.
+_TABLE_CACHE_LIMIT = 2
 _table_cache = {}
+
+# Rolling buffer of deduplicated children per layer: once it fills, the buffer
+# is written to a sorted run file instead of growing, which is what bounds the
+# RAM a single layer of the enumeration can use.
+_DEDUP_BUFFER_BYTES = 1 << 30
+# A merged layer file at most this large is loaded back into RAM; anything
+# bigger stays on disk as a memory-mapped array.
+_LAYER_RAM_LIMIT = 1 << 29
+# Positions per task: one task never carries more than this many int64 codes
+# through a process queue.
+_MAX_CHUNK_ELEMENTS = 4 << 20
+# A pool is fed in waves that hold at most this many task bytes and at least
+# this many tasks, so the queue cannot accumulate a whole layer.
+_MAX_IN_FLIGHT_BYTES = 1 << 29
+_MIN_IN_FLIGHT_TASKS = 32
+# Fan-in of the on-disk run merge and the block a merge cursor buffers.
+_MERGE_FAN_IN = 16
+_MERGE_BLOCK_ELEMENTS = 1 << 20
 
 
 # ---------------------------------------------------------------------------
@@ -268,7 +302,12 @@ def _init_enumeration_worker(codec):
 
 
 def _expand_codes(task):
-    """Return the codes of the children of every position in ``task``."""
+    """Return the sorted, deduplicated codes of the children of every position in ``task``.
+
+    Deduplicating in the worker spreads the sort over the pool and shrinks
+    what has to travel back to the parent; the parent only has to merge the
+    per-task runs.
+    """
     codes, player = task
     codec = _enumeration_state["codec"]
     lines_first_rest = codec.lines_first_rest
@@ -289,7 +328,7 @@ def _expand_codes(task):
         base, destination_weights = weights_of(board)
         for move in gen_moves(board, player, transfer_allowed, neighbours, cell_count):
             append(child_code(base, destination_weights, move, player))
-    return np.asarray(result, dtype=np.int64)
+    return np.unique(np.asarray(result, dtype=np.int64))
 
 
 def _pool_context(workers):
@@ -304,9 +343,19 @@ def _pool_context(workers):
 
 
 def _chunk_size(total, workers):
-    if not workers or int(workers) < 2 or total == 0:
+    """Positions per task, chosen so that neither a task nor the queue of
+    tasks can grow past the budgets above.
+
+    The slice is spread over ``workers * 8`` tasks when that stays under
+    ``_MAX_CHUNK_ELEMENTS``, and grows to the cap when a layer is large enough
+    that the spread would chop it into millions of tiny tasks.
+    """
+    if total == 0:
+        return 1
+    if not workers or int(workers) < 2:
         return max(1, total)
-    return max(1, min(4096, -(-total // (int(workers) * 8))))
+    spread = -(-total // (int(workers) * 8))
+    return max(1, min(_MAX_CHUNK_ELEMENTS, spread))
 
 
 def _chunked(codes, size):
@@ -314,16 +363,170 @@ def _chunked(codes, size):
         yield codes[start:start + size]
 
 
+def _task_bytes(task):
+    items = task if isinstance(task, tuple) else (task,)
+    return sum(int(getattr(item, "nbytes", 0)) for item in items)
+
+
 def _map_chunks(function, tasks, workers, pool_context, initializer, initargs):
-    """Map ``function`` over ``tasks``, serially or on a pool of processes."""
+    """Yield ``(task, function(task))`` for every entry of ``tasks``.
+
+    Serially or on a pool of processes. On a pool the tasks are handed over in
+    waves that hold at most ``_MAX_IN_FLIGHT_BYTES`` and at most
+    ``max(_MIN_IN_FLIGHT_TASKS, 2 * workers)`` entries, rather than through
+    ``imap``'s feed: a layer with millions of tasks would otherwise pile up,
+    pickled, in the queue while the workers are still busy with the first of
+    them.
+    """
     if pool_context is None:
         initializer(*initargs)
         for task in tasks:
-            yield function(task)
+            yield task, function(task)
         return
+    if workers and int(workers) > 0:
+        wanted = 2 * int(workers)
+    else:
+        wanted = 2 * (os.cpu_count() or 4)
+    wave_limit = max(_MIN_IN_FLIGHT_TASKS, wanted)
     with pool_context.Pool(workers, initializer=initializer, initargs=initargs) as pool:
-        for result in pool.imap(function, tasks, chunksize=1):
-            yield result
+        wave = []
+        wave_bytes = 0
+        for task in tasks:
+            wave.append(task)
+            wave_bytes += _task_bytes(task)
+            if len(wave) >= wave_limit or wave_bytes >= _MAX_IN_FLIGHT_BYTES:
+                for item, result in zip(wave, pool.map(function, wave, chunksize=1)):
+                    yield item, result
+                wave = []
+                wave_bytes = 0
+        for item, result in zip(wave, pool.map(function, wave, chunksize=1)):
+            yield item, result
+
+
+def _unique_sorted(pending):
+    """Merge already sorted, per-task deduplicated pieces into one sorted set."""
+    if len(pending) == 1:
+        return pending[0]
+    merged = np.concatenate(pending)
+    merged.sort()
+    if len(merged) == 0:
+        return merged
+    keep = np.empty(len(merged), dtype=bool)
+    keep[0] = True
+    np.not_equal(merged[1:], merged[:-1], out=keep[1:])
+    return merged[keep]
+
+
+def _flush_run(pending, work_dir, name):
+    """Write the deduplicated children of one buffer to a sorted run file."""
+    merged = _unique_sorted(pending)
+    path = os.path.join(work_dir, name + ".bin")
+    with open(path, "wb") as handle:
+        handle.write(merged.tobytes())
+    return path
+
+
+class _RunReader:
+    """A buffered cursor over one sorted ``int64`` run file."""
+
+    def __init__(self, path, block_elements):
+        self._handle = open(path, "rb")
+        self._block_elements = int(block_elements)
+        self.buffer = np.empty(0, dtype=np.int64)
+
+    def fill(self):
+        """Refill the cursor once it is empty; return whether data is left."""
+        if len(self.buffer) == 0:
+            data = self._handle.read(self._block_elements * 8)
+            if data:
+                self.buffer = np.frombuffer(data, dtype=np.int64)
+        return len(self.buffer) > 0
+
+    def close(self):
+        self._handle.close()
+
+
+def _merge_sorted_group(paths, target):
+    """Merge sorted run files into one sorted file, never holding more than
+    ``_MERGE_FAN_IN`` blocks of ``_MERGE_BLOCK_ELEMENTS`` codes at a time.
+
+    The pivot of every round is the smallest of the cursors' last codes. No
+    cursor can still hold an unloaded code below that pivot, because the
+    unloaded part of a run starts at its cursor's last code, so the round may
+    safely emit every loaded code up to the pivot. The cursor that defined the
+    pivot drains completely in the round it sets the pivot, every other cursor
+    contributes a prefix of its own block, and the round's output is a sorted
+    deduplicated block of at most the fan-in times the block size. The pivot
+    rises from round to round, and every round drops the codes that are not
+    strictly above what the previous rounds wrote, which also removes a pivot
+    the defining cursor still holds behind its block boundary; the file comes
+    out strictly increasing and every code appears exactly once.
+    """
+    readers = [_RunReader(path, _MERGE_BLOCK_ELEMENTS) for path in paths]
+    last = None
+    try:
+        with open(target, "wb") as out:
+            while True:
+                active = [reader for reader in readers if reader.fill()]
+                if not active:
+                    break
+                pivot = min(int(reader.buffer[-1]) for reader in active)
+                pieces = []
+                for reader in active:
+                    count = int(np.searchsorted(reader.buffer, pivot, side="right"))
+                    if count:
+                        pieces.append(reader.buffer[:count])
+                        reader.buffer = reader.buffer[count:]
+                chunk = pieces[0] if len(pieces) == 1 else np.concatenate(pieces)
+                del pieces
+                chunk = np.unique(chunk)
+                if last is not None:
+                    chunk = chunk[np.searchsorted(chunk, last, side="right"):]
+                if len(chunk):
+                    out.write(chunk.tobytes())
+                    last = int(chunk[-1])
+    finally:
+        for reader in readers:
+            reader.close()
+
+
+def _merge_run_files(paths, work_dir, stem):
+    """Merge run files into one sorted file, in passes of ``_MERGE_FAN_IN``.
+
+    The inputs are owned by ``work_dir`` and are removed once they have been
+    merged, so the disk use stays at about twice the size of the final file.
+    """
+    paths = list(paths)
+    pass_number = 0
+    while len(paths) > _MERGE_FAN_IN:
+        merged = []
+        for index in range(0, len(paths), _MERGE_FAN_IN):
+            group = paths[index:index + _MERGE_FAN_IN]
+            target = os.path.join(
+                work_dir, f"{stem}_merge{pass_number}_{index // _MERGE_FAN_IN}.bin",
+            )
+            _merge_sorted_group(group, target)
+            merged.append(target)
+        for path in paths:
+            os.remove(path)
+        paths = merged
+        pass_number += 1
+    if len(paths) == 1:
+        return paths[0]
+    target = os.path.join(work_dir, stem + ".bin")
+    _merge_sorted_group(paths, target)
+    for path in paths:
+        os.remove(path)
+    return target
+
+
+def _load_merged_layer(path, ram_limit):
+    """Return a merged layer file as an array, from RAM or memory-mapped."""
+    if os.path.getsize(path) <= ram_limit:
+        layer = np.fromfile(path, dtype=np.int64)
+        os.remove(path)
+        return layer
+    return np.memmap(path, dtype=np.int64, mode="r")
 
 
 def enumerate_reachable(
@@ -333,6 +536,7 @@ def enumerate_reachable(
     extra_rotation_allowed=True,
     workers=None,
     show_progress=True,
+    work_dir=None,
 ):
     """Enumerate the reachable board codes, grouped by number of occupied cells.
 
@@ -341,8 +545,24 @@ def enumerate_reachable(
     game is already over are pruned, so only boards that can occur in a real
     game are returned. The endgame presses are rotations, so they add no child
     and leave the enumeration itself untouched.
+
+    The children of one ply are deduplicated as they arrive, so the edge list
+    of a layer is never held in RAM as a whole: at most ``_DEDUP_BUFFER_BYTES``
+    of deduplicated children are kept before the buffer is written to a sorted
+    run file under ``work_dir`` (a private temporary directory when none is
+    given). A layer that needed runs is merged on disk into one sorted file,
+    which is returned as a memory-mapped array when it does not fit
+    ``_LAYER_RAM_LIMIT``; a layer that stayed within the buffer comes back as
+    an ordinary in-memory array.
     """
+    import shutil
+    import tempfile
+
     codec = _Codec(grid_size, rotation, transfer_allowed, extra_rotation_allowed)
+    if work_dir is None:
+        import atexit
+        work_dir = tempfile.mkdtemp(prefix="orbito_layers_")
+        atexit.register(shutil.rmtree, work_dir, ignore_errors=True)
     pool_context = _pool_context(workers)
     progress = tablebase._make_progress(
         codec.cell_count + 1,
@@ -357,19 +577,40 @@ def enumerate_reachable(
                 layers.append(np.zeros(0, dtype=np.int64))
                 continue
             player = _player_at(ply)
-            tasks = [
-                (chunk, player)
-                for chunk in _chunked(codes, _chunk_size(len(codes), workers))
-            ]
-            pieces = _map_chunks(
+            chunk_size = _chunk_size(len(codes), workers)
+            tasks = ((chunk, player) for chunk in _chunked(codes, chunk_size))
+            pending = []
+            pending_bytes = 0
+            runs = []
+            run_number = 0
+            for _task, piece in _map_chunks(
                 _expand_codes, tasks, workers, pool_context,
                 _init_enumeration_worker, (codec,),
-            )
-            collected = [piece for piece in pieces if len(piece)]
-            if collected:
-                layers.append(np.unique(np.concatenate(collected)))
+            ):
+                if len(piece) == 0:
+                    continue
+                pending.append(piece)
+                pending_bytes += piece.nbytes
+                if pending_bytes >= _DEDUP_BUFFER_BYTES:
+                    runs.append(_flush_run(
+                        pending, work_dir, f"ply{ply}_run{run_number}",
+                    ))
+                    run_number += 1
+                    pending = []
+                    pending_bytes = 0
+            if runs:
+                if pending:
+                    runs.append(_flush_run(
+                        pending, work_dir, f"ply{ply}_run{run_number}",
+                    ))
+                layers.append(_load_merged_layer(
+                    _merge_run_files(runs, work_dir, f"ply{ply}"), _LAYER_RAM_LIMIT,
+                ))
+            elif pending:
+                layers.append(_unique_sorted(pending))
             else:
                 layers.append(np.zeros(0, dtype=np.int64))
+            del pending, runs
             if progress is not None:
                 progress.update()
     finally:
@@ -513,6 +754,11 @@ def sweep_layers(codec, layers, workers=None, show_progress=True):
     inside a layer are independent of each other as well. That is what makes
     the sweep both linear in the size of the reachable set and easy to spread
     over several processes.
+
+    Every chunk of results is scattered into the tables the moment it arrives,
+    so a layer's results are never accumulated, and each entry of ``layers`` is
+    released as soon as that layer has been swept, so only one layer of codes
+    is alive at a time on top of the tables themselves.
     """
     pool_context = _pool_context(workers)
     if pool_context is not None:
@@ -526,31 +772,32 @@ def sweep_layers(codec, layers, workers=None, show_progress=True):
         dtx = np.zeros(codec.size, dtype=np.uint8)
         score_source, dtx_source = score, dtx
 
+    expected = int(sum(len(codes) for codes in layers))
     progress = tablebase._make_progress(
         len(layers), f"{codec.grid_size}x{codec.grid_size} sweep", show_progress,
     )
     try:
         for ply in range(len(layers) - 1, -1, -1):
             codes = layers[ply]
-            if len(codes) == 0:
+            layers[ply] = None
+            if codes is None or len(codes) == 0:
                 continue
             player = _player_at(ply)
-            tasks = [
-                (chunk, player)
-                for chunk in _chunked(codes, _chunk_size(len(codes), workers))
-            ]
-            results = list(_map_chunks(
+            chunk_size = _chunk_size(len(codes), workers)
+            tasks = ((chunk, player) for chunk in _chunked(codes, chunk_size))
+            for task, (scores, distances) in _map_chunks(
                 _sweep_codes, tasks, workers, pool_context,
                 _init_sweep_worker, (codec, score_source, dtx_source),
-            ))
-            score[codes] = np.concatenate([item[0] for item in results])
-            dtx[codes] = np.concatenate([item[1] for item in results])
+            ):
+                chunk = task[0]
+                score[chunk] = scores
+                dtx[chunk] = distances
+            del codes
             if progress is not None:
                 progress.update()
     finally:
         if progress is not None:
             progress.close()
-    expected = int(sum(len(codes) for codes in layers))
     solved = int(np.count_nonzero(score != UNSOLVED))
     if solved != expected:
         raise RuntimeError(
@@ -590,18 +837,31 @@ def build_context_tablebase(
     workers=None,
     show_progress=True,
 ):
-    """Build and store the value table for a single rule context."""
+    """Build and store the value table for a single rule context.
+
+    The enumeration runs inside a private temporary directory so that a layer
+    too big for RAM can be merged and kept on disk, and the directory is
+    removed again once the sweep has consumed those layers.
+    """
+    import shutil
+    import tempfile
+
     rotation = tablebase._canonical_rotation(rotation)
     transfer_allowed = bool(transfer_allowed)
     extra_rotation_allowed = bool(extra_rotation_allowed)
-    codec, layers = enumerate_reachable(
-        grid_size, rotation, transfer_allowed, extra_rotation_allowed,
-        workers=workers, show_progress=show_progress,
-    )
-    score, dtx = sweep_layers(
-        codec, layers, workers=workers, show_progress=show_progress,
-    )
-    positions = int(sum(len(codes) for codes in layers))
+    work_dir = tempfile.mkdtemp(prefix="orbito_retrograde_")
+    try:
+        codec, layers = enumerate_reachable(
+            grid_size, rotation, transfer_allowed, extra_rotation_allowed,
+            workers=workers, show_progress=show_progress, work_dir=work_dir,
+        )
+        layer_sizes = [int(len(codes)) for codes in layers]
+        positions = int(sum(layer_sizes))
+        score, dtx = sweep_layers(
+            codec, layers, workers=workers, show_progress=show_progress,
+        )
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
     metadata = {
         "format_version": FORMAT_VERSION,
         "grid_size": int(grid_size),
@@ -612,7 +872,7 @@ def build_context_tablebase(
         "starting_player": 1,
         "score_convention": "negamax value from the point of view of the side to move",
         "positions": positions,
-        "layer_sizes": [int(len(codes)) for codes in layers],
+        "layer_sizes": layer_sizes,
         "table_entries": int(codec.size),
     }
     file_path = context_file(base_dir, grid_size, rotation, transfer_allowed, extra_rotation_allowed)
@@ -1455,9 +1715,9 @@ def main(argv=None):
     parser.add_argument(
         "--rotations", default=",".join(STORED_ROTATIONS),
         help="comma separated rotation directions, or 'all'; a reflection maps "
-             "the clockwise game onto the counterclockwise one, so the default "
-             f"is only {', '.join(STORED_ROTATIONS)} and 'counterclockwise' is "
-             "answered from the clockwise table",
+              "the clockwise game onto the counterclockwise one, so the default "
+              f"is only {', '.join(STORED_ROTATIONS)} and 'clockwise' is "
+              "answered from the counterclockwise table",
     )
     parser.add_argument(
         "--transfers", default="all",

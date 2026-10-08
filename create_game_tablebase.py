@@ -17,7 +17,7 @@ except ImportError:
 
 
 ROTATION_DIRECTIONS = ("still", "clockwise", "counterclockwise")
-COMPRESSED_ROTATION_DIRECTIONS = ("still", "clockwise")
+COMPRESSED_ROTATION_DIRECTIONS = ("still", "counterclockwise")
 TRANSFER_RULES = (False, True)
 EXTRA_ROTATION_RULES = (False, True)
 PLAYER_TURNS = (1, 2)
@@ -163,7 +163,7 @@ def _symmetry_transformations(rotate_direction):
     rotation = _canonical_rotation(rotate_direction)
     if rotation == "still":
         return tuple((reflection, turns) for reflection in (False, True) for turns in range(4))
-    if rotation == "clockwise":
+    if rotation == "counterclockwise":
         return tuple((False, turns) for turns in range(4))
     return tuple((True, turns) for turns in range(4))
 
@@ -178,7 +178,7 @@ def _turning_changes_the_result(state, rotation):
     board is not canonicalized by rotation. A "still" rotation turns nothing at
     all, so the presses can only end in a draw there and rotating is harmless.
     """
-    if _canonical_rotation(rotation) != "clockwise":
+    if _canonical_rotation(rotation) != "counterclockwise":
         return False
     state = _as_state(state)
     if np.any(state == 0):
@@ -209,7 +209,7 @@ def canonicalize_state(state, rotate_direction):
             best_state = candidate
             best_symmetry = symmetry
     rotation = _canonical_rotation(rotate_direction)
-    stored_rotation = "clockwise" if rotation == "counterclockwise" else rotation
+    stored_rotation = "counterclockwise" if rotation == "clockwise" else rotation
     return best_state, best_symmetry, stored_rotation
 
 

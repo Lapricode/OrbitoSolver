@@ -259,7 +259,7 @@ def ask_rotation(default="counterclockwise"):
     }
     while True:
         answer = prompt(
-            f"Rotation after each turn: (c)lockwise, (a)nticlockwise, s(t)ill [{default}] "
+            f"Rotation after each turn: (c)lockwise, (a)nticlockwise/counterclockwise, (s)till [{default}] "
         ).strip().lower()
         if not answer:
             return default
